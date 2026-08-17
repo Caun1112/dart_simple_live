@@ -11,15 +11,19 @@ import 'dart:ui' as ui;
 class FollowUserItem extends StatelessWidget {
   final FollowUser item;
   final Function()? onRemove;
+  final Function()? onSpecialTap;
   final Function()? onTap;
   final Function()? onLongPress;
   final bool playing;
+  final bool showSpecialMark;
   const FollowUserItem({
     required this.item,
     this.onRemove,
+    this.onSpecialTap,
     this.onTap,
     this.onLongPress,
     this.playing = false,
+    this.showSpecialMark = false,
     Key? key,
   }) : super(key: key);
 
@@ -126,12 +130,38 @@ class FollowUserItem extends StatelessWidget {
               ),
             )
           : (onRemove == null
-              ? null
-              : IconButton(
-                  onPressed: () {
-                    onRemove?.call();
-                  },
-                  icon: const Icon(Remix.dislike_line),
+              ? (showSpecialMark && item.isSpecialFollow
+                  ? const SizedBox(
+                      width: 48,
+                      child: Center(
+                        child: Icon(
+                          Icons.star,
+                          color: Colors.amber,
+                        ),
+                      ),
+                    )
+                  : null)
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onSpecialTap != null)
+                      IconButton(
+                        tooltip: item.isSpecialFollow ? "取消特别关注" : "特别关注",
+                        onPressed: () {
+                          onSpecialTap?.call();
+                        },
+                        icon: Icon(
+                          item.isSpecialFollow ? Icons.star : Icons.star_border,
+                          color: item.isSpecialFollow ? Colors.amber : null,
+                        ),
+                      ),
+                    IconButton(
+                      onPressed: () {
+                        onRemove?.call();
+                      },
+                      icon: const Icon(Remix.dislike_line),
+                    ),
+                  ],
                 )),
       onTap: onTap,
       onLongPress: onLongPress,
@@ -139,13 +169,10 @@ class FollowUserItem extends StatelessWidget {
   }
 
   String getStatus(int status) {
-    if (status == 0) {
-      return "读取中";
-    } else if (status == 1) {
+    if (status != 2) {
       return "未开播";
-    } else {
-      return "直播中";
     }
+    return "直播中";
   }
 
   String formatLiveDuration(String? startTimeStampString) {

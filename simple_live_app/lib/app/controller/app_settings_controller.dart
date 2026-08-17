@@ -9,6 +9,7 @@ import 'package:simple_live_app/services/background_playback_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 class AppSettingsController extends GetxController {
@@ -18,6 +19,43 @@ class AppSettingsController extends GetxController {
   static const String _keywordShieldPrefix = "keyword:";
   static const String _userShieldPrefix = "user:";
   static const String kGlobalUserShieldSiteId = "__all__";
+  static const int kDanmuDedupeModeUser = 0;
+  static const int kDanmuDedupeModeStrict = 1;
+  static const int kDanmuDedupeDefaultWindow = 10;
+  static const int kDanmuDedupeStrictMinWindow = 5;
+  static const int kDanmuDedupeMaxWindow = 100;
+  static const int kDanmuDedupeStrictWarnWindow = 20;
+  static const int kLiveEventFlowDefaultLimit = 100;
+  static const int kLiveEventFlowMinLimit = 100;
+  static const int kLiveEventFlowMaxLimit = 500;
+  static const int kLiveEventFlowDefaultWindowSeconds = 30;
+  static const int kLiveEventFlowMinWindowSeconds = 5;
+  static const int kLiveEventFlowMaxWindowSeconds = 120;
+  static const int kLiveEventFlowDefaultDisplaySeconds = 10;
+  static const int kLiveEventFlowMinDisplaySeconds = 3;
+  static const int kLiveEventFlowMaxDisplaySeconds = 60;
+  static const int kLiveEventFlowDefaultMinCount = 5;
+  static const int kLiveEventFlowMinCount = 2;
+  static const int kLiveEventFlowMaxCount = 100;
+  static const int kMultiRoomDefaultGap = 2;
+  static const int kMultiRoomMinGap = 0;
+  static const int kMultiRoomMaxGap = 24;
+  static const int kShortcutDisabled = 0;
+
+  static final Map<int, String> liveRoomShortcutOptions = {
+    kShortcutDisabled: "关闭",
+    LogicalKeyboardKey.keyF.keyId: "F",
+    LogicalKeyboardKey.keyD.keyId: "D",
+    LogicalKeyboardKey.keyM.keyId: "M",
+    LogicalKeyboardKey.keyR.keyId: "R",
+    LogicalKeyboardKey.keyC.keyId: "C",
+    LogicalKeyboardKey.keyQ.keyId: "Q",
+    LogicalKeyboardKey.keyE.keyId: "E",
+    LogicalKeyboardKey.keyT.keyId: "T",
+    LogicalKeyboardKey.keyG.keyId: "G",
+    LogicalKeyboardKey.keyB.keyId: "B",
+    LogicalKeyboardKey.keyN.keyId: "N",
+  };
 
   /// 缩放模式
   var scaleMode = 0.obs;
@@ -49,6 +87,8 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kDanmuSpeed, 10.0);
     danmuEnable.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuEnable, true);
+    danmuRenderEmoji.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kDanmuRenderEmoji, true);
     danmuShieldEnable.value = LocalStorageService.instance
         .getValue(LocalStorageService.kDanmuShieldEnable, true);
     danmuKeywordShieldEnable.value = LocalStorageService.instance
@@ -103,11 +143,76 @@ class AppSettingsController extends GetxController {
 
     playerForceHttps.value = LocalStorageService.instance
         .getValue(LocalStorageService.kPlayerForceHttps, false);
+    autoSwitchNextOnLiveEnd.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kAutoSwitchNextOnLiveEnd,
+      false,
+    );
+    autoSwitchNextOnPlaybackFailure.value =
+        LocalStorageService.instance.getValue(
+      LocalStorageService.kAutoSwitchNextOnPlaybackFailure,
+      false,
+    );
 
     autoFullScreen.value = LocalStorageService.instance
         .getValue(LocalStorageService.kAutoFullScreen, false);
+    autoPipOnExit.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kAutoPipOnExit, false);
     playershowSuperChat.value = LocalStorageService.instance
         .getValue(LocalStorageService.kPlayerShowSuperChat, false);
+    liveEventFlowEnable.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kLiveEventFlowEnable,
+      false,
+    );
+    liveEventFlowLimit.value = _normalizeLiveEventFlowLimit(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveEventFlowLimit,
+        kLiveEventFlowDefaultLimit,
+      ),
+    );
+    liveEventFlowOverlayEnable.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kLiveEventFlowOverlayEnable,
+      true,
+    );
+    liveEventFlowWindowSeconds.value = _normalizeLiveEventFlowWindowSeconds(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveEventFlowWindowSeconds,
+        kLiveEventFlowDefaultWindowSeconds,
+      ),
+    );
+    liveEventFlowDisplaySeconds.value = _normalizeLiveEventFlowDisplaySeconds(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveEventFlowDisplaySeconds,
+        kLiveEventFlowDefaultDisplaySeconds,
+      ),
+    );
+    liveEventFlowMinCount.value = _normalizeLiveEventFlowMinCount(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveEventFlowMinCount,
+        kLiveEventFlowDefaultMinCount,
+      ),
+    );
+    superChatSortDesc.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kSuperChatSortDesc, false);
+    danmuDedupeEnable.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kDanmuDedupeEnable,
+      false,
+    );
+    danmuDedupeMode.value = _normalizeDanmuDedupeMode(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kDanmuDedupeMode,
+        kDanmuDedupeModeUser,
+      ),
+    );
+    danmuDedupeWindow.value = _normalizeDanmuDedupeWindow(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kDanmuDedupeWindow,
+        kDanmuDedupeDefaultWindow,
+      ),
+    );
+    danmuDedupeStep.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kDanmuDedupeStep,
+      2,
+    );
 
     _loadDanmuDelaySettings();
     _loadUserRemarks();
@@ -123,8 +228,7 @@ class AppSettingsController extends GetxController {
       LocalStorageService.kPlayerVolume,
       100.0,
     );
-    pipHideDanmu.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kPIPHideDanmu, true);
+    pipHideDanmu.value = _loadPipHideDanmu();
 
     styleColor.value = LocalStorageService.instance
         .getValue(LocalStorageService.kStyleColor, 0xff3498db);
@@ -146,9 +250,18 @@ class AppSettingsController extends GetxController {
 
     customPlayerOutput.value = LocalStorageService.instance
         .getValue(LocalStorageService.kCustomPlayerOutput, false);
+    mpvProfile.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kMpvProfile, "balanced");
+    mpvAdvancedOptions.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kMpvAdvancedOptions, "");
+    importedMpvConfPath.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kImportedMpvConfPath, "");
 
-    liveSubtitleEnable.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kLiveSubtitleEnable, false);
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveSubtitleEnable, false);
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveSubtitleStartupGuard, false);
+    liveSubtitleEnable.value = false;
     liveSubtitleModelPath.value = LocalStorageService.instance
         .getValue(LocalStorageService.kLiveSubtitleModelPath, "");
     liveSubtitleLanguage.value = LocalStorageService.instance
@@ -157,6 +270,22 @@ class AppSettingsController extends GetxController {
         .getValue(LocalStorageService.kLiveSubtitleFontSize, 18.0);
     liveSubtitlePosition.value = LocalStorageService.instance
         .getValue(LocalStorageService.kLiveSubtitlePosition, 1);
+    liveSubtitleOffsetX.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kLiveSubtitleOffsetX, 0.5);
+    liveSubtitleOffsetY.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kLiveSubtitleOffsetY, 0.82);
+    liveSubtitleColor.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kLiveSubtitleColor, 0xffffffff);
+    liveSubtitleFontWeight.value = LocalStorageService.instance
+        .getValue(LocalStorageService.kLiveSubtitleFontWeight, 6);
+    liveSubtitleBackgroundEnable.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kLiveSubtitleBackgroundEnable,
+      true,
+    );
+    liveSubtitlePositionLocked.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kLiveSubtitlePositionLocked,
+      false,
+    );
 
     videoOutputDriver.value = LocalStorageService.instance.getValue(
       LocalStorageService.kVideoOutputDriver,
@@ -189,11 +318,67 @@ class AppSettingsController extends GetxController {
     autoUpdateFollowDuration.value = LocalStorageService.instance
         .getValue(LocalStorageService.kUpdateFollowDuration, 10);
 
-    updateFollowThreadCount.value = LocalStorageService.instance
-        .getValue(LocalStorageService.kUpdateFollowThreadCount, 0); // 默认 0 = 自动
+    updateFollowThreadCount.value = LocalStorageService.instance.getValue(
+        LocalStorageService.kUpdateFollowThreadCount, 8); // 默认 8，0 = 自动
+    followPageSize.value = _normalizeFollowPageSize(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kFollowPageSize,
+        kFollowPageSizeDefault,
+      ),
+    );
+
+    lastSearchSiteId.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kLastSearchSiteId,
+      Constant.kBiliBili,
+    );
+
+    followGroupMode.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kFollowGroupMode,
+      "liveStatus",
+    );
+    followSelectedGroupId.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kFollowSelectedGroupId,
+      "all",
+    );
+
+    rememberWindowPlacement.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kRememberWindowPlacement,
+      false,
+    );
+    multiRoomGap.value = _normalizeMultiRoomGap(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kMultiRoomGap,
+        kMultiRoomDefaultGap,
+      ),
+    );
+    multiRoomCollapseChat.value = LocalStorageService.instance.getValue(
+      LocalStorageService.kMultiRoomCollapseChat,
+      true,
+    );
 
     initSiteSort();
     initHomeSort();
+    initLiveRoomTabSort();
+    initLiveRoomQuickAccessSettings();
+    initLiveRoomShortcutSettings();
+  }
+
+  bool _loadPipHideDanmu() {
+    final migrated = LocalStorageService.instance.getValue(
+      LocalStorageService.kPIPHideDanmuDefaultMigrated,
+      false,
+    );
+    if (!migrated &&
+        !LocalStorageService.instance.settingsBox
+            .containsKey(LocalStorageService.kPIPHideDanmu)) {
+      LocalStorageService.instance
+          .setValue(LocalStorageService.kPIPHideDanmuDefaultMigrated, true);
+      return false;
+    }
+    return LocalStorageService.instance.getValue(
+      LocalStorageService.kPIPHideDanmu,
+      false,
+    );
   }
 
   void initSiteSort() {
@@ -234,6 +419,87 @@ class AppSettingsController extends GetxController {
     }
 
     homeSort.value = sort;
+  }
+
+  void initLiveRoomTabSort() {
+    var sort = LocalStorageService.instance
+        .getValue(
+          LocalStorageService.kLiveRoomTabSort,
+          Constant.allLiveRoomTabs.keys.join(","),
+        )
+        .split(",")
+        .where((item) => item.trim().isNotEmpty)
+        .toList();
+    final keys = Constant.allLiveRoomTabs.keys.toList();
+    sort.removeWhere((item) => !keys.contains(item));
+    for (final key in keys) {
+      if (!sort.contains(key)) {
+        sort.add(key);
+      }
+    }
+    liveRoomTabSort.value = sort;
+  }
+
+  void initLiveRoomQuickAccessSettings() {
+    final keys = Constant.allLiveRoomQuickAccess.keys.toList();
+    var sort = LocalStorageService.instance
+        .getValue(
+          LocalStorageService.kLiveRoomQuickAccessSort,
+          keys.join(","),
+        )
+        .split(",")
+        .where((item) => item.trim().isNotEmpty)
+        .toList();
+    sort.removeWhere((item) => !keys.contains(item));
+    for (final key in keys) {
+      if (!sort.contains(key)) {
+        sort.add(key);
+      }
+    }
+    liveRoomQuickAccessSort.value = sort;
+
+    final enabledRaw = LocalStorageService.instance.getValue(
+      LocalStorageService.kLiveRoomQuickAccessEnabled,
+      keys.join(","),
+    );
+    final enabled =
+        enabledRaw.split(",").where((item) => keys.contains(item)).toSet();
+    liveRoomQuickAccessEnabled
+      ..clear()
+      ..addAll(enabled);
+  }
+
+  void initLiveRoomShortcutSettings() {
+    liveRoomShortcutFullScreen.value = _normalizeLiveRoomShortcut(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveRoomShortcutFullScreen,
+        LogicalKeyboardKey.keyF.keyId,
+      ),
+    );
+    liveRoomShortcutDanmaku.value = _normalizeLiveRoomShortcut(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveRoomShortcutDanmaku,
+        LogicalKeyboardKey.keyD.keyId,
+      ),
+    );
+    liveRoomShortcutMute.value = _normalizeLiveRoomShortcut(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveRoomShortcutMute,
+        LogicalKeyboardKey.keyM.keyId,
+      ),
+    );
+    liveRoomShortcutRefresh.value = _normalizeLiveRoomShortcut(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveRoomShortcutRefresh,
+        LogicalKeyboardKey.keyR.keyId,
+      ),
+    );
+    liveRoomShortcutToggleChat.value = _normalizeLiveRoomShortcut(
+      LocalStorageService.instance.getValue(
+        LocalStorageService.kLiveRoomShortcutToggleChat,
+        LogicalKeyboardKey.keyC.keyId,
+      ),
+    );
   }
 
   void setNoFirstRun() {
@@ -542,6 +808,13 @@ class AppSettingsController extends GetxController {
     LocalStorageService.instance.setValue(LocalStorageService.kDanmuEnable, e);
   }
 
+  var danmuRenderEmoji = true.obs;
+  void setDanmuRenderEmoji(bool e) {
+    danmuRenderEmoji.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuRenderEmoji, e);
+  }
+
   var danmuStrokeWidth = 2.0.obs;
   void setDanmuStrokeWidth(double e) {
     danmuStrokeWidth.value = e;
@@ -656,6 +929,31 @@ class AppSettingsController extends GetxController {
     autoFullScreen.value = e;
     LocalStorageService.instance
         .setValue(LocalStorageService.kAutoFullScreen, e);
+  }
+
+  var autoSwitchNextOnLiveEnd = false.obs;
+  void setAutoSwitchNextOnLiveEnd(bool e) {
+    autoSwitchNextOnLiveEnd.value = e;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kAutoSwitchNextOnLiveEnd,
+      e,
+    );
+  }
+
+  var autoSwitchNextOnPlaybackFailure = false.obs;
+  void setAutoSwitchNextOnPlaybackFailure(bool e) {
+    autoSwitchNextOnPlaybackFailure.value = e;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kAutoSwitchNextOnPlaybackFailure,
+      e,
+    );
+  }
+
+  var autoPipOnExit = false.obs;
+  void setAutoPipOnExit(bool e) {
+    autoPipOnExit.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kAutoPipOnExit, e);
   }
 
   var playershowSuperChat = false.obs;
@@ -1503,6 +1801,230 @@ class AppSettingsController extends GetxController {
     );
   }
 
+  RxList<String> liveRoomTabSort = RxList<String>();
+  void setLiveRoomTabSort(List<String> e) {
+    final keys = Constant.allLiveRoomTabs.keys.toList();
+    final value = e.where((item) => keys.contains(item)).toList();
+    for (final key in keys) {
+      if (!value.contains(key)) {
+        value.add(key);
+      }
+    }
+    liveRoomTabSort.value = value;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomTabSort,
+      liveRoomTabSort.join(","),
+    );
+  }
+
+  RxList<String> liveRoomQuickAccessSort = RxList<String>();
+  RxSet<String> liveRoomQuickAccessEnabled = <String>{}.obs;
+
+  void setLiveRoomQuickAccessSort(List<String> e) {
+    final keys = Constant.allLiveRoomQuickAccess.keys.toList();
+    final value = e.where((item) => keys.contains(item)).toList();
+    for (final key in keys) {
+      if (!value.contains(key)) {
+        value.add(key);
+      }
+    }
+    liveRoomQuickAccessSort.value = value;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomQuickAccessSort,
+      liveRoomQuickAccessSort.join(","),
+    );
+  }
+
+  void setLiveRoomQuickAccessEnabled(String key, bool enabled) {
+    if (!Constant.allLiveRoomQuickAccess.containsKey(key)) {
+      return;
+    }
+    if (enabled) {
+      liveRoomQuickAccessEnabled.add(key);
+    } else {
+      liveRoomQuickAccessEnabled.remove(key);
+    }
+    liveRoomQuickAccessEnabled.refresh();
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomQuickAccessEnabled,
+      liveRoomQuickAccessEnabled.join(","),
+    );
+  }
+
+  int _normalizeLiveRoomShortcut(int value) {
+    return liveRoomShortcutOptions.containsKey(value)
+        ? value
+        : kShortcutDisabled;
+  }
+
+  var liveRoomShortcutFullScreen = LogicalKeyboardKey.keyF.keyId.obs;
+  void setLiveRoomShortcutFullScreen(int value) {
+    final normalized = _normalizeLiveRoomShortcut(value);
+    liveRoomShortcutFullScreen.value = normalized;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomShortcutFullScreen,
+      normalized,
+    );
+  }
+
+  var liveRoomShortcutDanmaku = LogicalKeyboardKey.keyD.keyId.obs;
+  void setLiveRoomShortcutDanmaku(int value) {
+    final normalized = _normalizeLiveRoomShortcut(value);
+    liveRoomShortcutDanmaku.value = normalized;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomShortcutDanmaku,
+      normalized,
+    );
+  }
+
+  var liveRoomShortcutMute = LogicalKeyboardKey.keyM.keyId.obs;
+  void setLiveRoomShortcutMute(int value) {
+    final normalized = _normalizeLiveRoomShortcut(value);
+    liveRoomShortcutMute.value = normalized;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomShortcutMute,
+      normalized,
+    );
+  }
+
+  var liveRoomShortcutRefresh = LogicalKeyboardKey.keyR.keyId.obs;
+  void setLiveRoomShortcutRefresh(int value) {
+    final normalized = _normalizeLiveRoomShortcut(value);
+    liveRoomShortcutRefresh.value = normalized;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomShortcutRefresh,
+      normalized,
+    );
+  }
+
+  var liveRoomShortcutToggleChat = LogicalKeyboardKey.keyC.keyId.obs;
+  void setLiveRoomShortcutToggleChat(int value) {
+    final normalized = _normalizeLiveRoomShortcut(value);
+    liveRoomShortcutToggleChat.value = normalized;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLiveRoomShortcutToggleChat,
+      normalized,
+    );
+  }
+
+  var lastSearchSiteId = Constant.kBiliBili.obs;
+  void setLastSearchSiteId(String siteId) {
+    if (!Sites.allSites.containsKey(siteId)) {
+      return;
+    }
+    lastSearchSiteId.value = siteId;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kLastSearchSiteId,
+      siteId,
+    );
+  }
+
+  var followGroupMode = "liveStatus".obs;
+  var followSelectedGroupId = "all".obs;
+
+  void setFollowGroupSelection({
+    required String mode,
+    required String groupId,
+  }) {
+    followGroupMode.value = mode;
+    followSelectedGroupId.value = groupId;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kFollowGroupMode,
+      mode,
+    );
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kFollowSelectedGroupId,
+      groupId,
+    );
+  }
+
+  var rememberWindowPlacement = false.obs;
+  void setRememberWindowPlacement(bool value) {
+    rememberWindowPlacement.value = value;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kRememberWindowPlacement,
+      value,
+    );
+  }
+
+  var multiRoomGap = kMultiRoomDefaultGap.obs;
+  int get effectiveMultiRoomGap => _normalizeMultiRoomGap(multiRoomGap.value);
+  void setMultiRoomGap(int value) {
+    final normalized = _normalizeMultiRoomGap(value);
+    multiRoomGap.value = normalized;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kMultiRoomGap,
+      normalized,
+    );
+  }
+
+  int _normalizeMultiRoomGap(int value) {
+    return value.clamp(kMultiRoomMinGap, kMultiRoomMaxGap).toInt();
+  }
+
+  var multiRoomCollapseChat = true.obs;
+  void setMultiRoomCollapseChat(bool value) {
+    multiRoomCollapseChat.value = value;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kMultiRoomCollapseChat,
+      value,
+    );
+  }
+
+  Future<void> setDesktopWindowPlacement({
+    required Rect bounds,
+    required bool maximized,
+  }) async {
+    await LocalStorageService.instance.setValue(
+      LocalStorageService.kDesktopWindowBounds,
+      jsonEncode({
+        "left": bounds.left,
+        "top": bounds.top,
+        "width": bounds.width,
+        "height": bounds.height,
+      }),
+    );
+    await LocalStorageService.instance.setValue(
+      LocalStorageService.kDesktopWindowMaximized,
+      maximized,
+    );
+  }
+
+  Rect? getDesktopWindowBounds() {
+    final raw = LocalStorageService.instance.getValue(
+      LocalStorageService.kDesktopWindowBounds,
+      "",
+    );
+    if (raw.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return null;
+      }
+      final left = (decoded["left"] as num?)?.toDouble();
+      final top = (decoded["top"] as num?)?.toDouble();
+      final width = (decoded["width"] as num?)?.toDouble();
+      final height = (decoded["height"] as num?)?.toDouble();
+      if (left == null || top == null || width == null || height == null) {
+        return null;
+      }
+      if (width < 280 || height < 280) {
+        return null;
+      }
+      return Rect.fromLTWH(left, top, width, height);
+    } catch (e) {
+      Log.logPrint(e);
+      return null;
+    }
+  }
+
+  bool get desktopWindowMaximized => LocalStorageService.instance.getValue(
+        LocalStorageService.kDesktopWindowMaximized,
+        false,
+      );
+
   Rx<double> playerVolume = 100.0.obs;
   void setPlayerVolume(double value) {
     playerVolume.value = value;
@@ -1516,6 +2038,137 @@ class AppSettingsController extends GetxController {
   void setPIPHideDanmu(bool e) {
     pipHideDanmu.value = e;
     LocalStorageService.instance.setValue(LocalStorageService.kPIPHideDanmu, e);
+  }
+
+  var superChatSortDesc = false.obs;
+  void setSuperChatSortDesc(bool e) {
+    superChatSortDesc.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kSuperChatSortDesc, e);
+  }
+
+  var liveEventFlowEnable = false.obs;
+  void setLiveEventFlowEnable(bool e) {
+    liveEventFlowEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveEventFlowEnable, e);
+  }
+
+  var liveEventFlowLimit = kLiveEventFlowDefaultLimit.obs;
+  void setLiveEventFlowLimit(int e) {
+    final value = _normalizeLiveEventFlowLimit(e);
+    liveEventFlowLimit.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveEventFlowLimit, value);
+  }
+
+  int _normalizeLiveEventFlowLimit(int value) {
+    return value.clamp(kLiveEventFlowMinLimit, kLiveEventFlowMaxLimit).toInt();
+  }
+
+  var liveEventFlowOverlayEnable = true.obs;
+  void setLiveEventFlowOverlayEnable(bool e) {
+    liveEventFlowOverlayEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveEventFlowOverlayEnable, e);
+  }
+
+  var liveEventFlowWindowSeconds = kLiveEventFlowDefaultWindowSeconds.obs;
+  int get effectiveLiveEventFlowWindowSeconds =>
+      _normalizeLiveEventFlowWindowSeconds(liveEventFlowWindowSeconds.value);
+  void setLiveEventFlowWindowSeconds(int e) {
+    final value = _normalizeLiveEventFlowWindowSeconds(e);
+    liveEventFlowWindowSeconds.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveEventFlowWindowSeconds, value);
+  }
+
+  int _normalizeLiveEventFlowWindowSeconds(int value) {
+    return value
+        .clamp(kLiveEventFlowMinWindowSeconds, kLiveEventFlowMaxWindowSeconds)
+        .toInt();
+  }
+
+  var liveEventFlowDisplaySeconds = kLiveEventFlowDefaultDisplaySeconds.obs;
+  int get effectiveLiveEventFlowDisplaySeconds =>
+      _normalizeLiveEventFlowDisplaySeconds(liveEventFlowDisplaySeconds.value);
+  void setLiveEventFlowDisplaySeconds(int e) {
+    final value = _normalizeLiveEventFlowDisplaySeconds(e);
+    liveEventFlowDisplaySeconds.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveEventFlowDisplaySeconds, value);
+  }
+
+  int _normalizeLiveEventFlowDisplaySeconds(int value) {
+    return value
+        .clamp(kLiveEventFlowMinDisplaySeconds, kLiveEventFlowMaxDisplaySeconds)
+        .toInt();
+  }
+
+  var liveEventFlowMinCount = kLiveEventFlowDefaultMinCount.obs;
+  int get effectiveLiveEventFlowMinCount =>
+      _normalizeLiveEventFlowMinCount(liveEventFlowMinCount.value);
+  void setLiveEventFlowMinCount(int e) {
+    final value = _normalizeLiveEventFlowMinCount(e);
+    liveEventFlowMinCount.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveEventFlowMinCount, value);
+  }
+
+  int _normalizeLiveEventFlowMinCount(int value) {
+    return value.clamp(kLiveEventFlowMinCount, kLiveEventFlowMaxCount).toInt();
+  }
+
+  var danmuDedupeEnable = false.obs;
+  void setDanmuDedupeEnable(bool e) {
+    danmuDedupeEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuDedupeEnable, e);
+  }
+
+  var danmuDedupeMode = kDanmuDedupeModeUser.obs;
+  bool get danmuDedupeStrictMode =>
+      danmuDedupeMode.value == kDanmuDedupeModeStrict;
+  int get danmuDedupeWindowMin =>
+      danmuDedupeStrictMode ? kDanmuDedupeStrictMinWindow : 1;
+  int get effectiveDanmuDedupeWindow =>
+      _normalizeDanmuDedupeWindow(danmuDedupeWindow.value);
+
+  void setDanmuDedupeMode(int e) {
+    final value = _normalizeDanmuDedupeMode(e);
+    danmuDedupeMode.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuDedupeMode, value);
+    if (value == kDanmuDedupeModeStrict) {
+      setDanmuDedupeEnable(true);
+      setDanmuDedupeWindow(kDanmuDedupeDefaultWindow);
+    }
+  }
+
+  int _normalizeDanmuDedupeMode(int value) {
+    return value == kDanmuDedupeModeStrict
+        ? kDanmuDedupeModeStrict
+        : kDanmuDedupeModeUser;
+  }
+
+  int _normalizeDanmuDedupeWindow(int value) {
+    return value.clamp(danmuDedupeWindowMin, kDanmuDedupeMaxWindow).toInt();
+  }
+
+  var danmuDedupeWindow = kDanmuDedupeDefaultWindow.obs;
+  void setDanmuDedupeWindow(int e) {
+    final value = _normalizeDanmuDedupeWindow(e);
+    danmuDedupeWindow.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuDedupeWindow, value);
+  }
+
+  var danmuDedupeStep = 2.obs;
+  void setDanmuDedupeStep(int e) {
+    final value = e.clamp(1, 20).toInt();
+    danmuDedupeStep.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kDanmuDedupeStep, value);
   }
 
   var styleColor = 0xff3498db.obs;
@@ -1605,6 +2258,58 @@ class AppSettingsController extends GetxController {
         .setValue(LocalStorageService.kLiveSubtitlePosition, value);
   }
 
+  var liveSubtitleOffsetX = 0.5.obs;
+  var liveSubtitleOffsetY = 0.82.obs;
+  void setLiveSubtitleOffset({
+    double? x,
+    double? y,
+  }) {
+    if (x != null) {
+      final value = x.clamp(0.05, 0.95).toDouble();
+      liveSubtitleOffsetX.value = value;
+      LocalStorageService.instance
+          .setValue(LocalStorageService.kLiveSubtitleOffsetX, value);
+    }
+    if (y != null) {
+      final value = y.clamp(0.08, 0.92).toDouble();
+      liveSubtitleOffsetY.value = value;
+      LocalStorageService.instance
+          .setValue(LocalStorageService.kLiveSubtitleOffsetY, value);
+    }
+  }
+
+  var liveSubtitleColor = 0xffffffff.obs;
+  void setLiveSubtitleColor(int e) {
+    liveSubtitleColor.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveSubtitleColor, e);
+  }
+
+  var liveSubtitleFontWeight = 6.obs;
+  void setLiveSubtitleFontWeight(int e) {
+    final value = e.clamp(1, 9).toInt();
+    liveSubtitleFontWeight.value = value;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveSubtitleFontWeight, value);
+  }
+
+  FontWeight get liveSubtitleResolvedFontWeight =>
+      FontWeight.values[liveSubtitleFontWeight.value.clamp(1, 9).toInt() - 1];
+
+  var liveSubtitleBackgroundEnable = true.obs;
+  void setLiveSubtitleBackgroundEnable(bool e) {
+    liveSubtitleBackgroundEnable.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveSubtitleBackgroundEnable, e);
+  }
+
+  var liveSubtitlePositionLocked = false.obs;
+  void setLiveSubtitlePositionLocked(bool e) {
+    liveSubtitlePositionLocked.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kLiveSubtitlePositionLocked, e);
+  }
+
   var videoOutputDriver = "".obs;
   void setVideoOutputDriver(String e) {
     videoOutputDriver.value = e;
@@ -1626,6 +2331,26 @@ class AppSettingsController extends GetxController {
         .setValue(LocalStorageService.kVideoHardwareDecoder, e);
   }
 
+  var mpvProfile = "balanced".obs;
+  void setMpvProfile(String e) {
+    mpvProfile.value = e;
+    LocalStorageService.instance.setValue(LocalStorageService.kMpvProfile, e);
+  }
+
+  var mpvAdvancedOptions = "".obs;
+  void setMpvAdvancedOptions(String e) {
+    mpvAdvancedOptions.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kMpvAdvancedOptions, e);
+  }
+
+  var importedMpvConfPath = "".obs;
+  void setImportedMpvConfPath(String e) {
+    importedMpvConfPath.value = e;
+    LocalStorageService.instance
+        .setValue(LocalStorageService.kImportedMpvConfPath, e);
+  }
+
   var autoUpdateFollowEnable = false.obs;
   void setAutoUpdateFollowEnable(bool e) {
     autoUpdateFollowEnable.value = e;
@@ -1640,11 +2365,27 @@ class AppSettingsController extends GetxController {
         .setValue(LocalStorageService.kUpdateFollowDuration, e);
   }
 
-  var updateFollowThreadCount = 4.obs;
+  var updateFollowThreadCount = 8.obs;
   void setUpdateFollowThreadCount(int e) {
     updateFollowThreadCount.value = e;
     LocalStorageService.instance
         .setValue(LocalStorageService.kUpdateFollowThreadCount, e);
+  }
+
+  static const int kFollowPageSizeDefault = 200;
+  static const int kFollowPageSizeMin = 2;
+  var followPageSize = kFollowPageSizeDefault.obs;
+  int _normalizeFollowPageSize(int value) {
+    return value.clamp(kFollowPageSizeMin, 400).toInt();
+  }
+
+  void setFollowPageSize(int value) {
+    final normalized = _normalizeFollowPageSize(value);
+    followPageSize.value = normalized;
+    LocalStorageService.instance.setValue(
+      LocalStorageService.kFollowPageSize,
+      normalized,
+    );
   }
 
   var playerForceHttps = false.obs;

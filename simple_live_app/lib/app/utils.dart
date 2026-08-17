@@ -207,25 +207,46 @@ class Utils {
           topRight: Radius.circular(12),
         ),
       ),
-      builder: (_) => Column(
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.only(
-              left: 12,
-            ),
-            title: Text(title),
-            trailing: IconButton(
-              onPressed: Get.back,
-              icon: const Icon(Remix.close_line),
-            ),
+      builder: (_) => SafeArea(
+        top: false,
+        bottom: false,
+        child: Padding(
+          padding: AppStyle.bottomSheetPadding(),
+          child: Column(
+            children: [
+              ListTile(
+                contentPadding: const EdgeInsets.only(
+                  left: 12,
+                ),
+                title: Text(title),
+                trailing: IconButton(
+                  onPressed: Get.back,
+                  icon: const Icon(Remix.close_line),
+                ),
+              ),
+              Expanded(
+                child: child,
+              ),
+            ],
           ),
-          Expanded(
-            child: child,
-          ),
-        ],
+        ),
       ),
     );
     return result;
+  }
+
+  static Widget bottomSheetSafeArea({
+    required Widget child,
+    double bottom = 12,
+  }) {
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Padding(
+        padding: AppStyle.bottomSheetPadding(bottom: bottom),
+        child: child,
+      ),
+    );
   }
 
   /// 文本编辑的弹窗

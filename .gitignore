@@ -4,19 +4,22 @@ simple_live_tv_app/.vscode/settings.json
 
 # local release artifacts
 release/
+models/
+docs/
+issue_logs/
+experience/
+**/android/app/build/
 
 # scripts 
 build_android_apk.bat
 build_tv_apk.bat
 deploy_windows.bat
+tools/build-release.ps1
+tools/build-*.ps1
 
 # local temp workspace files
 fix-guide.md
-tmp_typora_skill_test/
-tmp_typora_skill_test_v2/
-tmp_typora_skill_test_v4/
-tmp_typora_skill_test_v5/
-.codex_tmp/
+
 
 # macOS Spotlight Search index file
 *.DS_Store
@@ -24,8 +27,6 @@ tmp_typora_skill_test_v5/
 # doc
 *.md
 !README.md
-!Update.md
-!RELEASE_BUILD_FLOW.md
 !**/README.md
 
 # others

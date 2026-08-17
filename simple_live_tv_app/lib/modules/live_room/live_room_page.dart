@@ -20,18 +20,7 @@ class LiveRoomPage extends GetView<LiveRoomController> {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          //双击返回键退出
-          if (controller.doubleClickExit) {
-            controller.doubleClickTimer?.cancel();
-            Get.back();
-            return;
-          }
-          controller.doubleClickExit = true;
-          SmartDialog.showToast("再按一次退出播放器");
-          controller.doubleClickTimer = Timer(const Duration(seconds: 2), () {
-            controller.doubleClickExit = false;
-            controller.doubleClickTimer!.cancel();
-          });
+          requestExitPlayer();
         }
       },
       child: KeyboardListener(
@@ -54,12 +43,13 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     }
     Log.logPrint(key);
 
-    // if (key.logicalKey == LogicalKeyboardKey.escape ||
-    //     key.logicalKey == LogicalKeyboardKey.backspace ||
-    //     key.logicalKey == LogicalKeyboardKey.goBack) {
-    //   // Get.back();
-    //   return;
-    // }
+    if (key.logicalKey == LogicalKeyboardKey.escape ||
+        key.logicalKey == LogicalKeyboardKey.backspace ||
+        key.logicalKey == LogicalKeyboardKey.goBack ||
+        key.logicalKey == LogicalKeyboardKey.browserBack) {
+      requestExitPlayer();
+      return;
+    }
     // 点击OK、Enter、Select键时显示/隐藏控制器
     if (key.logicalKey == LogicalKeyboardKey.select ||
         key.logicalKey == LogicalKeyboardKey.enter ||
@@ -110,6 +100,21 @@ class LiveRoomPage extends GetView<LiveRoomController> {
     }
   }
 
+  void requestExitPlayer() {
+    // 双击返回键退出
+    if (controller.doubleClickExit) {
+      controller.doubleClickTimer?.cancel();
+      Get.back();
+      return;
+    }
+    controller.doubleClickExit = true;
+    SmartDialog.showToast("再按一次退出播放器");
+    controller.doubleClickTimer = Timer(const Duration(seconds: 2), () {
+      controller.doubleClickExit = false;
+      controller.doubleClickTimer?.cancel();
+    });
+  }
+
   Widget buildMediaPlayer() {
     var boxFit = BoxFit.contain;
     double? aspectRatio;
@@ -153,7 +158,30 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ),
           ),
         ),
+        Obx(
+          () => Visibility(
+            visible: controller.autoExitEnable.value,
+            child: Positioned(
+              right: 24,
+              top: 24,
+              child: Text(
+                "${parseDuration(controller.countdown.value)}后自动关闭",
+                style: AppStyle.textStyleWhite,
+              ),
+            ),
+          ),
+        ),
       ],
     );
+  }
+
+  String parseDuration(int duration) {
+    int hours = duration ~/ 3600;
+    int minutes = duration % 3600 ~/ 60;
+    int seconds = duration % 60;
+
+    return "${hours.toString().padLeft(2, '0')}:"
+        "${minutes.toString().padLeft(2, '0')}:"
+        "${seconds.toString().padLeft(2, '0')}";
   }
 }

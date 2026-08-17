@@ -3,6 +3,7 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  auto_orientation_v2
   connectivity_plus
   dynamic_color
   flutter_inappwebview_windows
@@ -19,6 +20,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   jni
+  sherpa_onnx_windows
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

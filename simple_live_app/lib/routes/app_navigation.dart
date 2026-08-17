@@ -5,9 +5,11 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_app/app/platform_utils.dart';
 import 'package:simple_live_app/app/sites.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/models/sync_client_info_model.dart';
+import 'package:simple_live_app/modules/multi_room/multi_room_models.dart';
 import 'package:simple_live_app/routes/route_path.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/sync_service.dart';
@@ -54,8 +56,11 @@ class AppNavigator {
   }
 
   /// 跳转至直播间
-  static void toLiveRoomDetail(
-      {required Site site, required String roomId}) async {
+  static void toLiveRoomDetail({
+    required Site site,
+    required String roomId,
+    bool initialDesktopSidePanelCollapsed = false,
+  }) async {
     final roomKey = "${site.id}_$roomId";
     final lastOpenAt = _lastLiveRoomOpenAt[roomKey];
     final now = DateTime.now();
@@ -90,9 +95,28 @@ class AppNavigator {
       }
     }
 
-    Get.toNamed(RoutePath.kLiveRoomDetail, arguments: site, parameters: {
-      "roomId": roomId,
-    });
+    Get.toNamed(
+      RoutePath.kLiveRoomDetail,
+      arguments: {
+        "site": site,
+        "initialDesktopSidePanelCollapsed": initialDesktopSidePanelCollapsed,
+      },
+      parameters: {
+        "roomId": roomId,
+      },
+    );
+  }
+
+  static Future<dynamic> toMultiRoom(List<MultiRoomItem> rooms) {
+    if (!PlatformUtils.supportsInlineMultiRoom) {
+      SmartDialog.showToast("当前移动端版本已关闭多开同屏");
+      return Future.value();
+    }
+    return Get.toNamed(
+          RoutePath.kMultiRoom,
+          arguments: rooms,
+        ) ??
+        Future.value();
   }
 
   /// 跳转至哔哩哔哩登录

@@ -5,6 +5,7 @@
 import FlutterMacOS
 import Foundation
 
+import auto_orientation_v2
 import connectivity_plus
 import device_info_plus
 import dynamic_color
@@ -24,6 +25,7 @@ import wakelock_plus
 import window_manager
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+  AutoOrientationPlugin.register(with: registry.registrar(forPlugin: "AutoOrientationPlugin"))
   ConnectivityPlusPlugin.register(with: registry.registrar(forPlugin: "ConnectivityPlusPlugin"))
   DeviceInfoPlusMacosPlugin.register(with: registry.registrar(forPlugin: "DeviceInfoPlusMacosPlugin"))
   DynamicColorPlugin.register(with: registry.registrar(forPlugin: "DynamicColorPlugin"))

@@ -6,19 +6,21 @@ import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/event_bus.dart';
 import 'package:simple_live_app/app/utils.dart';
-import 'package:simple_live_app/models/db/follow_user.dart';
-import 'package:simple_live_app/models/db/follow_user_tag.dart';
-import 'package:simple_live_app/models/db/history.dart';
+import 'package:simple_live_app/services/bulk_data_import_service.dart';
+import 'package:simple_live_app/services/bilibili_account_service.dart';
 import 'package:simple_live_app/services/db_service.dart';
+import 'package:simple_live_app/services/douyin_account_service.dart';
 import 'package:simple_live_app/services/follow_service.dart';
 import 'package:simple_live_app/services/live_subtitle_service.dart';
 import 'package:simple_live_app/services/local_storage_service.dart';
+import 'package:simple_live_core/simple_live_core.dart';
 
 class ProfileBackupService extends GetxService {
   static ProfileBackupService get instance => Get.find<ProfileBackupService>();
 
   static const schema = "simple_live_profile";
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
+  static const Set<int> _supportedSchemaVersions = {2, 3};
 
   static const Set<String> _excludedSettings = {
     LocalStorageService.kFirstRun,
@@ -29,8 +31,6 @@ class ProfileBackupService extends GetxService {
     LocalStorageService.kWebDAVPassword,
     LocalStorageService.kWebDAVLastUploadTime,
     LocalStorageService.kWebDAVLastRecoverTime,
-    LocalStorageService.kBilibiliCookie,
-    LocalStorageService.kDouyinCookie,
   };
 
   Map<String, dynamic> exportProfileMap() {
@@ -53,6 +53,7 @@ class ProfileBackupService extends GetxService {
       "platform": Platform.operatingSystem,
       "exportedAt": DateTime.now().toIso8601String(),
       "settings": settingsPayload,
+      "accounts": _exportAccounts(),
       "danmuShield": shieldPayload,
       "shieldPresets": _exportShieldPresets(),
       "followUsers": followUsers,
@@ -65,6 +66,7 @@ class ProfileBackupService extends GetxService {
         "followUserCount": followUsers.length,
         "followTagCount": followUserTags.length,
         "historyCount": histories.length,
+        "accountCount": (_exportAccounts()["items"] as List).length,
       },
     };
   }
@@ -76,30 +78,40 @@ class ProfileBackupService extends GetxService {
   Future<ProfileImportSummary> importProfileJson(
     String content, {
     bool overwrite = false,
+    ProfileImportOptions options = const ProfileImportOptions(),
+    SyncProgressCallback? onProgress,
   }) async {
+    onProgress?.call(const SyncProgress(stage: "解析配置包"));
     final decoded = jsonDecode(content);
     if (decoded is! Map) {
       throw const FormatException("不是 Simple Live 配置包");
     }
     if (decoded["schema"] == schema) {
-      if ((decoded["schemaVersion"] as num?)?.toInt() != schemaVersion) {
+      final version = (decoded["schemaVersion"] as num?)?.toInt() ?? 2;
+      if (!_supportedSchemaVersions.contains(version)) {
         throw const FormatException("暂不支持该配置包版本");
       }
       return importProfileMap(
         decoded.cast<String, dynamic>(),
         overwrite: overwrite,
+        options: options,
+        onProgress: onProgress,
       );
     }
     if (decoded["type"] == "simple_live") {
       return importLegacyProfileMap(
         decoded.cast<String, dynamic>(),
         overwrite: overwrite,
+        options: options,
+        onProgress: onProgress,
       );
     }
     if (_looksLikeLegacyDataFile(decoded)) {
       return importLegacyDataFileMap(
         decoded.cast<String, dynamic>(),
         overwrite: overwrite,
+        options: options,
+        onProgress: onProgress,
       );
     }
     throw const FormatException("不是 Simple Live 配置包");
@@ -108,14 +120,29 @@ class ProfileBackupService extends GetxService {
   Future<ProfileImportSummary> importLegacyProfileMap(
     Map<String, dynamic> payload, {
     bool overwrite = false,
+    ProfileImportOptions options = const ProfileImportOptions(),
+    SyncProgressCallback? onProgress,
   }) async {
     final summary = ProfileImportSummary();
-    await _importSettings(payload["config"], summary, overwrite);
-    await _importShields({"raw": _legacyShieldValues(payload["shield"])},
-        summary, overwrite);
+    if (options.settings) {
+      onProgress?.call(const SyncProgress(stage: "导入设置"));
+      await _importSettings(payload["config"], summary, overwrite);
+    }
+    if (options.shields) {
+      await _importShields(
+        {"raw": _legacyShieldValues(payload["shield"])},
+        summary,
+        overwrite,
+        onProgress,
+      );
+    }
 
-    AppSettingsController.instance.reloadFromStorage();
-    await LiveSubtitleService.instance.syncPreviewFromSettings();
+    if (options.settings || options.shields || options.shieldPresets) {
+      AppSettingsController.instance.reloadFromStorage();
+    }
+    if (options.settings) {
+      await LiveSubtitleService.instance.syncPreviewFromSettings();
+    }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
     return summary;
@@ -153,27 +180,53 @@ class ProfileBackupService extends GetxService {
   Future<ProfileImportSummary> importLegacyDataFileMap(
     Map<String, dynamic> payload, {
     bool overwrite = false,
+    ProfileImportOptions options = const ProfileImportOptions(),
+    SyncProgressCallback? onProgress,
   }) async {
     final summary = ProfileImportSummary();
     if (payload["data"] is List) {
-      await _importLegacyDataList(payload["data"], summary, overwrite);
+      await _importLegacyDataList(
+        payload["data"],
+        summary,
+        overwrite,
+        options,
+        onProgress,
+      );
     } else {
-      await _importFollowUsers(_readPayloadList(payload, [
-        "followUsers",
-        "follows",
-        "favorites",
-      ]), summary, overwrite);
-      await _importFollowTags(_readPayloadList(payload, [
-        "followUserTags",
-        "tags",
-      ]), summary, overwrite);
-      await _importHistories(_readPayloadList(payload, [
-        "histories",
-        "history",
-      ]), summary, overwrite);
+      if (options.follows) {
+        await _importFollowUsers(
+            _readPayloadList(payload, [
+              "followUsers",
+              "follows",
+              "favorites",
+            ]),
+            summary,
+            overwrite,
+            onProgress);
+        await _importFollowTags(
+            _readPayloadList(payload, [
+              "followUserTags",
+              "tags",
+            ]),
+            summary,
+            overwrite,
+            onProgress);
+      }
+      if (options.histories) {
+        await _importHistories(
+            _readPayloadList(payload, [
+              "histories",
+              "history",
+            ]),
+            summary,
+            overwrite,
+            onProgress);
+      }
     }
 
-    await FollowService.instance.loadData(updateStatus: false);
+    if (options.follows) {
+      await FollowService.instance.loadData(updateStatus: false);
+    }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
     return summary;
@@ -194,28 +247,70 @@ class ProfileBackupService extends GetxService {
   Future<ProfileImportSummary> importProfileMap(
     Map<String, dynamic> payload, {
     bool overwrite = false,
+    ProfileImportOptions options = const ProfileImportOptions(),
+    SyncProgressCallback? onProgress,
   }) async {
     final summary = ProfileImportSummary();
-    await _importSettings(payload["settings"], summary, overwrite);
-    await _importShields(payload["danmuShield"], summary, overwrite);
-    await _importShieldPresets(payload["shieldPresets"], summary, overwrite);
-    await _importFollowUsers(_readPayloadList(payload, [
-      "followUsers",
-      "follows",
-      "favorites",
-    ]), summary, overwrite);
-    await _importFollowTags(_readPayloadList(payload, [
-      "followUserTags",
-      "tags",
-    ]), summary, overwrite);
-    await _importHistories(_readPayloadList(payload, [
-      "histories",
-      "history",
-    ]), summary, overwrite);
+    if (options.settings) {
+      onProgress?.call(const SyncProgress(stage: "导入设置"));
+      await _importSettings(payload["settings"], summary, overwrite);
+    }
+    if (options.shields) {
+      await _importShields(
+        payload["danmuShield"],
+        summary,
+        overwrite,
+        onProgress,
+      );
+    }
+    await _importAccounts(payload["accounts"]);
+    if (options.shieldPresets) {
+      onProgress?.call(const SyncProgress(stage: "导入屏蔽预设"));
+      await _importShieldPresets(
+        payload["shieldPresets"],
+        summary,
+        overwrite,
+      );
+    }
+    if (options.follows) {
+      await _importFollowUsers(
+          _readPayloadList(payload, [
+            "followUsers",
+            "follows",
+            "favorites",
+          ]),
+          summary,
+          overwrite,
+          onProgress);
+      await _importFollowTags(
+          _readPayloadList(payload, [
+            "followUserTags",
+            "tags",
+          ]),
+          summary,
+          overwrite,
+          onProgress);
+    }
+    if (options.histories) {
+      await _importHistories(
+          _readPayloadList(payload, [
+            "histories",
+            "history",
+          ]),
+          summary,
+          overwrite,
+          onProgress);
+    }
 
-    AppSettingsController.instance.reloadFromStorage();
-    await LiveSubtitleService.instance.syncPreviewFromSettings();
-    await FollowService.instance.loadData(updateStatus: false);
+    if (options.settings || options.shields || options.shieldPresets) {
+      AppSettingsController.instance.reloadFromStorage();
+    }
+    if (options.settings) {
+      await LiveSubtitleService.instance.syncPreviewFromSettings();
+    }
+    if (options.follows) {
+      await FollowService.instance.loadData(updateStatus: false);
+    }
     EventBus.instance.emit(Constant.kUpdateFollow, 0);
     EventBus.instance.emit(Constant.kUpdateHistory, 0);
     return summary;
@@ -232,6 +327,27 @@ class ProfileBackupService extends GetxService {
       result[key] = _safeJsonValue(entry.value);
     }
     return result;
+  }
+
+  Map<String, dynamic> _exportAccounts() {
+    return {
+      "items": [
+        {
+          "siteId": Constant.kBiliBili,
+          "cookie": LocalStorageService.instance.getValue(
+            LocalStorageService.kBilibiliCookie,
+            "",
+          ),
+        },
+        {
+          "siteId": Constant.kDouyin,
+          "cookie": LocalStorageService.instance.getValue(
+            LocalStorageService.kDouyinCookie,
+            "",
+          ),
+        },
+      ],
+    };
   }
 
   Map<String, dynamic> _exportShieldValues() {
@@ -304,6 +420,7 @@ class ProfileBackupService extends GetxService {
     dynamic rawShield,
     ProfileImportSummary summary,
     bool overwrite,
+    SyncProgressCallback? onProgress,
   ) async {
     if (overwrite) {
       await AppSettingsControllerSafe.clearShieldValues();
@@ -311,10 +428,13 @@ class ProfileBackupService extends GetxService {
     if (rawShield is Map) {
       final rawValues = rawShield["raw"];
       if (rawValues is List && rawValues.isNotEmpty) {
-        for (final value in rawValues) {
-          AppSettingsControllerSafe.importShieldValue(value.toString());
-          summary.shields++;
-        }
+        final result = await BulkDataImportService.importShieldValues(
+          rawValues,
+          overwrite: false,
+          onProgress: onProgress,
+        );
+        summary.shields += result.imported;
+        summary.skipped += result.skipped;
         return;
       }
       final keywords = rawShield["keywords"];
@@ -372,99 +492,78 @@ class ProfileBackupService extends GetxService {
     AppSettingsControllerSafe.reloadShields();
   }
 
+  Future<void> _importAccounts(dynamic rawAccounts) async {
+    if (rawAccounts is! Map) {
+      return;
+    }
+    final items = rawAccounts["items"];
+    if (items is! List) {
+      return;
+    }
+    for (final item in items) {
+      if (item is! Map) {
+        continue;
+      }
+      final siteId = item["siteId"]?.toString() ?? "";
+      final cookie = item["cookie"]?.toString() ?? "";
+      switch (siteId) {
+        case Constant.kBiliBili:
+          BiliBiliAccountService.instance.setCookie(cookie);
+          break;
+        case Constant.kDouyin:
+          if (cookie.isEmpty) {
+            DouyinAccountService.instance.clearCookie();
+          } else {
+            DouyinAccountService.instance.setCookie(cookie);
+          }
+          break;
+      }
+    }
+  }
+
   Future<void> _importFollowUsers(
     dynamic rawUsers,
     ProfileImportSummary summary,
     bool overwrite,
+    SyncProgressCallback? onProgress,
   ) async {
-    if (overwrite) {
-      await DBService.instance.followBox.clear();
-    }
-    if (rawUsers is! List) {
-      return;
-    }
-    for (final item in rawUsers) {
-      if (item is! Map) {
-        continue;
-      }
-      try {
-        final user = FollowUser.fromJson(Map<String, dynamic>.from(item));
-        if (user.id.isEmpty || user.roomId.isEmpty || user.siteId.isEmpty) {
-          summary.skipped++;
-          continue;
-        }
-        await DBService.instance.followBox.put(user.id, user);
-        summary.followUsers++;
-      } catch (_) {
-        summary.skipped++;
-      }
-    }
+    final result = await BulkDataImportService.importFollowUsers(
+      rawUsers,
+      overwrite: overwrite,
+      onProgress: onProgress,
+    );
+    summary.followUsers += result.imported;
+    summary.skipped += result.skipped;
   }
 
   Future<void> _importFollowTags(
     dynamic rawTags,
     ProfileImportSummary summary,
     bool overwrite,
+    SyncProgressCallback? onProgress,
   ) async {
-    if (overwrite) {
-      await DBService.instance.tagBox.clear();
-    }
-    if (rawTags is! List) {
-      return;
-    }
-    for (final item in rawTags) {
-      if (item is! Map) {
-        continue;
-      }
-      try {
-        final tag = FollowUserTag.fromJson(Map<String, dynamic>.from(item));
-        if (tag.id.isEmpty || tag.tag.isEmpty) {
-          summary.skipped++;
-          continue;
-        }
-        await DBService.instance.tagBox.put(tag.id, tag);
-        summary.followTags++;
-      } catch (_) {
-        summary.skipped++;
-      }
-    }
+    final result = await BulkDataImportService.importFollowTags(
+      rawTags,
+      overwrite: overwrite,
+      onProgress: onProgress,
+    );
+    summary.followTags += result.imported;
+    summary.skipped += result.skipped;
   }
 
   Future<void> _importHistories(
     dynamic rawHistories,
     ProfileImportSummary summary,
     bool overwrite,
+    SyncProgressCallback? onProgress,
   ) async {
-    if (overwrite) {
-      await DBService.instance.historyBox.clear();
-    }
-    if (rawHistories is! List) {
-      return;
-    }
-    for (final item in rawHistories) {
-      if (item is! Map) {
-        continue;
-      }
-      try {
-        final history = History.fromJson(Map<String, dynamic>.from(item));
-        if (history.id.isEmpty ||
-            history.roomId.isEmpty ||
-            history.siteId.isEmpty) {
-          summary.skipped++;
-          continue;
-        }
-        final old = DBService.instance.historyBox.get(history.id);
-        if (!overwrite &&
-            old != null &&
-            old.updateTime.isAfter(history.updateTime)) {
-          continue;
-        }
-        await DBService.instance.addOrUpdateHistory(history);
-        summary.histories++;
-      } catch (_) {
-        summary.skipped++;
-      }
-    }
+    final result = await BulkDataImportService.importHistories(
+      rawHistories,
+      overwrite: overwrite,
+      onProgress: onProgress,
+    );
+    summary.histories += result.imported;
+    summary.skipped += result.skipped;
   }
 
   dynamic _readPayloadList(Map<String, dynamic> payload, List<String> keys) {
@@ -484,6 +583,8 @@ class ProfileBackupService extends GetxService {
     dynamic rawList,
     ProfileImportSummary summary,
     bool overwrite,
+    ProfileImportOptions options,
+    SyncProgressCallback? onProgress,
   ) async {
     if (rawList is! List || rawList.isEmpty) {
       return;
@@ -491,20 +592,26 @@ class ProfileBackupService extends GetxService {
     final firstMap = rawList.whereType<Map>().firstOrNull;
     if (firstMap != null) {
       if (firstMap.containsKey("userId") || firstMap.containsKey("tag")) {
-        await _importFollowTags(rawList, summary, overwrite);
+        if (options.follows) {
+          await _importFollowTags(rawList, summary, overwrite, onProgress);
+        }
         return;
       }
       if (firstMap.containsKey("updateTime")) {
-        await _importHistories(rawList, summary, overwrite);
+        if (options.histories) {
+          await _importHistories(rawList, summary, overwrite, onProgress);
+        }
         return;
       }
       if (firstMap.containsKey("roomId") || firstMap.containsKey("siteId")) {
-        await _importFollowUsers(rawList, summary, overwrite);
+        if (options.follows) {
+          await _importFollowUsers(rawList, summary, overwrite, onProgress);
+        }
         return;
       }
     }
-    if (rawList.every((item) => item is String)) {
-      await _importShields({"raw": rawList}, summary, overwrite);
+    if (options.shields && rawList.every((item) => item is String)) {
+      await _importShields({"raw": rawList}, summary, overwrite, onProgress);
     }
   }
 
@@ -526,6 +633,22 @@ class ProfileBackupService extends GetxService {
     }
     return value.toString();
   }
+}
+
+class ProfileImportOptions {
+  final bool settings;
+  final bool shields;
+  final bool shieldPresets;
+  final bool follows;
+  final bool histories;
+
+  const ProfileImportOptions({
+    this.settings = true,
+    this.shields = true,
+    this.shieldPresets = true,
+    this.follows = true,
+    this.histories = true,
+  });
 }
 
 class ProfileImportSummary {

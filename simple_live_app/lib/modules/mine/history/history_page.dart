@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
@@ -13,8 +15,12 @@ class HistoryPage extends GetView<HistoryController> {
 
   @override
   Widget build(BuildContext context) {
-    var rowCount = MediaQuery.of(context).size.width ~/ 500;
-    if (rowCount < 1) rowCount = 1;
+    final isDesktop =
+        Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+    var rowCount = isDesktop ? 1 : MediaQuery.of(context).size.width ~/ 500;
+    if (rowCount < 1) {
+      rowCount = 1;
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text("观看记录"),

@@ -12,6 +12,12 @@ class RoutePath {
   /// 直播间
   static const kLiveRoomDetail = "/room/detail";
 
+  /// 多开同屏
+  static const kMultiRoom = "/room/multi";
+
+  /// 多开设置
+  static const kSettingsMultiRoom = "/settings/multi_room";
+
   /// 弹幕设置
   static const kSettingsDanmu = "/settings/danmu";
 
@@ -39,6 +45,9 @@ class RoutePath {
   /// 主页设置
   static const kSettingsIndexed = "/settings/indexed";
 
+  /// 播放页设置
+  static const kSettingsPlaybackPage = "/settings/playback_page";
+
   /// 外观设置
   static const kAppstyleSetting = "/settings/appstyle";
 
@@ -53,6 +62,9 @@ class RoutePath {
 
   /// BiliBili 二维码登录
   static const kBiliBiliQRLogin = "/settings/account/bilibili/qr_login";
+
+  /// 抖音 Web登录
+  static const kDouyinWebLogin = "/settings/account/douyin/web_login";
 
   /// 数据同步
   static const kLocalSync = "/local_sync";

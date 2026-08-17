@@ -1,5 +1,6 @@
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
@@ -172,6 +173,145 @@ class DanmuSettingsView extends GetView<AppSettingsController> {
                   onChanged: controller.setDanmuEnable,
                 ),
               ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsSwitch(
+                  title: "显示弹幕表情",
+                  value: controller.danmuRenderEmoji.value,
+                  onChanged: controller.setDanmuRenderEmoji,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsSwitch(
+                  title: "重点动态",
+                  subtitle: "汇总短时间内重复较多的弹幕内容",
+                  value: controller.liveEventFlowEnable.value,
+                  onChanged: controller.setLiveEventFlowEnable,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsSwitch(
+                  title: "全屏显示重点动态",
+                  subtitle: "在播放器全屏时显示当前重复弹幕摘要",
+                  value: controller.liveEventFlowOverlayEnable.value,
+                  onChanged: controller.setLiveEventFlowOverlayEnable,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsNumber(
+                  title: "动态统计跨度",
+                  subtitle: "多少秒内的重复弹幕合并计数",
+                  value: controller.liveEventFlowWindowSeconds.value,
+                  min: AppSettingsController.kLiveEventFlowMinWindowSeconds,
+                  max: AppSettingsController.kLiveEventFlowMaxWindowSeconds,
+                  step: 5,
+                  onChanged: controller.setLiveEventFlowWindowSeconds,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsNumber(
+                  title: "动态展示时间",
+                  subtitle: "一条动态多久没有更新后自动消失",
+                  value: controller.liveEventFlowDisplaySeconds.value,
+                  min: AppSettingsController.kLiveEventFlowMinDisplaySeconds,
+                  max: AppSettingsController.kLiveEventFlowMaxDisplaySeconds,
+                  step: 1,
+                  onChanged: controller.setLiveEventFlowDisplaySeconds,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsNumber(
+                  title: "动态起显次数",
+                  subtitle: "同一句重复达到多少次后进入重点动态",
+                  value: controller.liveEventFlowMinCount.value,
+                  min: AppSettingsController.kLiveEventFlowMinCount,
+                  max: AppSettingsController.kLiveEventFlowMaxCount,
+                  step: 1,
+                  onChanged: controller.setLiveEventFlowMinCount,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsNumber(
+                  title: "动态保留数量",
+                  subtitle: "控制动态页最多保留多少条摘要",
+                  value: controller.liveEventFlowLimit.value,
+                  min: AppSettingsController.kLiveEventFlowMinLimit,
+                  max: AppSettingsController.kLiveEventFlowMaxLimit,
+                  step: 50,
+                  onChanged: controller.setLiveEventFlowLimit,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsSwitch(
+                  title: "重复弹幕过滤",
+                  subtitle: controller.danmuDedupeStrictMode
+                      ? "刷屏严父：不同用户重复发同一句也只显示一次"
+                      : "普通：同一用户在最近若干条内重复发同一句只显示一次",
+                  value: controller.danmuDedupeEnable.value,
+                  onChanged: controller.setDanmuDedupeEnable,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(
+                () => SettingsMenu<int>(
+                  title: "过滤模式",
+                  subtitle: "刷屏严父会忽略用户，只按弹幕内容去重",
+                  value: controller.danmuDedupeMode.value,
+                  valueMap: const {
+                    AppSettingsController.kDanmuDedupeModeUser: "普通",
+                    AppSettingsController.kDanmuDedupeModeStrict: "刷屏严父",
+                  },
+                  onChanged: controller.setDanmuDedupeMode,
+                ),
+              ),
+              AppStyle.divider,
+              Obx(() {
+                final strictMode = controller.danmuDedupeStrictMode;
+                return SettingsNumber(
+                  title: "过滤窗口",
+                  subtitle: strictMode
+                      ? "严父默认 10 条；超过 20 条可能会让弹幕明显变少"
+                      : "默认 10 条；窗口越大越容易过滤刷屏",
+                  value: controller.danmuDedupeWindow.value,
+                  min: controller.danmuDedupeWindowMin,
+                  max: AppSettingsController.kDanmuDedupeMaxWindow,
+                  onChanged: (e) {
+                    controller.setDanmuDedupeWindow(e);
+                    if (controller.danmuDedupeStrictMode &&
+                        controller.danmuDedupeWindow.value >
+                            AppSettingsController
+                                .kDanmuDedupeStrictWarnWindow) {
+                      SmartDialog.showToast("过滤窗口超过 20 条后，弹幕可能会明显变少");
+                    }
+                  },
+                );
+              }),
+              Obx(() {
+                if (controller.danmuDedupeStrictMode) {
+                  return const SizedBox.shrink();
+                }
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AppStyle.divider,
+                    SettingsNumber(
+                      title: "过滤步长",
+                      subtitle: "默认 2；数值越大检查窗口移动越少",
+                      value: controller.danmuDedupeStep.value,
+                      min: 1,
+                      max: 20,
+                      onChanged: controller.setDanmuDedupeStep,
+                    ),
+                  ],
+                );
+              }),
               AppStyle.divider,
               Obx(
                 () => SettingsNumber(

@@ -7,6 +7,8 @@ import 'package:simple_live_app/app/controller/base_controller.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/services/profile_backup_service.dart';
+import 'package:simple_live_app/widgets/sync_progress_dialog.dart';
+import 'package:simple_live_core/simple_live_core.dart';
 
 class ProfileBackupController extends BaseController {
   Future<void> exportProfile() async {
@@ -59,16 +61,17 @@ class ProfileBackupController extends BaseController {
       if (picked == null || picked.files.single.path == null) {
         return;
       }
-      SmartDialog.showLoading(msg: "正在导入配置包");
+      SyncProgressDialog.show(const SyncProgress(stage: "正在导入配置包"));
       final content = await File(picked.files.single.path!).readAsString();
       final summary = await ProfileBackupService.instance.importProfileJson(
         content,
         overwrite: overwrite,
+        onProgress: SyncProgressDialog.update,
       );
-      SmartDialog.dismiss();
+      SyncProgressDialog.dismiss();
       SmartDialog.showToast("导入完成：${summary.message}");
     } catch (e) {
-      SmartDialog.dismiss();
+      SyncProgressDialog.dismiss();
       Log.logPrint(e);
       SmartDialog.showToast("导入失败：$e");
     }

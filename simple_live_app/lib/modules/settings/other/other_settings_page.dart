@@ -7,6 +7,7 @@ import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/settings/other/other_settings_controller.dart';
+import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:simple_live_app/widgets/settings/settings_action.dart';
 import 'package:simple_live_app/widgets/settings/settings_card.dart';
 import 'package:simple_live_app/widgets/settings/settings_menu.dart';
@@ -55,6 +56,27 @@ class OtherSettingsPage extends GetView<OtherSettingsController> {
               ),
             ),
           ),
+          if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) ...[
+            Padding(
+              padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
+              child: Text(
+                "桌面窗口",
+                style: Get.textTheme.titleSmall,
+              ),
+            ),
+            SettingsCard(
+              child: Obx(
+                () => SettingsSwitch(
+                  value: AppSettingsController
+                      .instance.rememberWindowPlacement.value,
+                  title: "记住窗口大小和位置",
+                  subtitle: "开启后恢复上次普通窗口位置和最大化状态",
+                  onChanged:
+                      AppSettingsController.instance.setRememberWindowPlacement,
+                ),
+              ),
+            ),
+          ],
           Padding(
             padding: AppStyle.edgeInsetsA12.copyWith(top: 24),
             child: Text(
@@ -95,8 +117,8 @@ class OtherSettingsPage extends GetView<OtherSettingsController> {
                 GetBuilder<OtherSettingsController>(
                   builder: (controller) => SettingsAction(
                     title: "同步服务地址",
-                    subtitle: "远程同步创建房间/加入房间使用的 WebSocket 服务",
-                    value: controller.syncServerUrl,
+                    subtitle: controller.syncServerUrlSubtitle,
+                    value: controller.syncServerUrlLabel,
                     onTap: controller.editSyncServerUrl,
                   ),
                 ),
@@ -104,10 +126,21 @@ class OtherSettingsPage extends GetView<OtherSettingsController> {
                 GetBuilder<OtherSettingsController>(
                   builder: (controller) => SettingsAction(
                     title: "同步代理地址",
-                    subtitle:
-                        "默认自动检测本机 127.0.0.1:51888；需要直连可填写 direct",
+                    subtitle: "默认自动检测本机 127.0.0.1:51888；需要直连可填写 direct",
                     value: controller.syncProxyUrl,
                     onTap: controller.editSyncProxyUrl,
+                  ),
+                ),
+                AppStyle.divider,
+                Obx(
+                  () => SettingsMenu(
+                    title: "mpv 性能档位",
+                    subtitle: "流畅适合核显/低功耗，均衡为默认，画质适合高性能显卡",
+                    value: AppSettingsController.instance.mpvProfile.value,
+                    valueMap: MpvOptionsService.profileLabels,
+                    onChanged: (e) {
+                      AppSettingsController.instance.setMpvProfile(e);
+                    },
                   ),
                 ),
                 AppStyle.divider,
@@ -119,6 +152,30 @@ class OtherSettingsPage extends GetView<OtherSettingsController> {
                     onChanged: (e) {
                       AppSettingsController.instance.setCustomPlayerOutput(e);
                     },
+                  ),
+                ),
+                AppStyle.divider,
+                GetBuilder<OtherSettingsController>(
+                  builder: (controller) => SettingsAction(
+                    title: "高级 mpv options",
+                    subtitle: "每行一个 key=value，覆盖内置档位和可视化设置",
+                    value: AppSettingsController
+                            .instance.mpvAdvancedOptions.value.isEmpty
+                        ? "未设置"
+                        : "已设置",
+                    onTap: controller.editMpvAdvancedOptions,
+                  ),
+                ),
+                AppStyle.divider,
+                GetBuilder<OtherSettingsController>(
+                  builder: (controller) => SettingsAction(
+                    title: "导入 mpv.conf",
+                    subtitle: "导入后复制到应用私有目录，覆盖同名 mpv option",
+                    value: AppSettingsController
+                            .instance.importedMpvConfPath.value.isEmpty
+                        ? "未导入"
+                        : "已导入",
+                    onTap: controller.importMpvConf,
                   ),
                 ),
                 AppStyle.divider,

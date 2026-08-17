@@ -1,0 +1,41 @@
+name: video_player_example
+description: Demonstrates how to use the video_player plugin.
+publish_to: none
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  media_kit:
+    path: ../../media_kit
+  media_kit_libs_video:
+    path: ../../libs/universal/media_kit_libs_video
+  media_kit_video:
+    path: ../../media_kit_video
+  video_player_media_kit:
+    path: ../
+
+  video_player: ^2.11.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+
+  build_runner: ^2.15.0
+  flutter_lints: any
+  path_provider: ^2.1.5
+  test: any
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/flutter-mark-square-64.png
+    - assets/Butterfly-209.mp4
+    - assets/Butterfly-209.webm
+    - assets/bumble_bee_captions.srt
+    - assets/bumble_bee_captions.vtt
+    - assets/Audio.mp3

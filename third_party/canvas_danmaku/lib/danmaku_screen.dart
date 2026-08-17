@@ -73,6 +73,9 @@ class _DanmakuScreenState extends State<DanmakuScreen>
   /// 运行状态
   bool _running = true;
 
+  final Map<String, ui.Image> _emojiImageCache = {};
+  final Set<String> _loadingEmojiImageUrls = {};
+
   @override
   void initState() {
     super.initState();
@@ -102,22 +105,65 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     WidgetsBinding.instance.addObserver(this);
   }
 
+  @override
+  void didUpdateWidget(covariant DanmakuScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_isSameOption(oldWidget.option, widget.option)) {
+      updateOption(widget.option);
+    }
+  }
+
   /// 处理 Android/iOS 应用后台或熄屏导致的动画问题
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       pause();
+    } else if (state == AppLifecycleState.resumed) {
+      resume();
     }
   }
 
   @override
   void dispose() {
     _running = false;
+    _controller.running = false;
     WidgetsBinding.instance.removeObserver(this);
     _animationController.dispose();
     _staticAnimationController.dispose();
+    _emojiImageCache.clear();
     _stopwatch.stop();
     super.dispose();
+  }
+
+  void _precacheEmojiImages(DanmakuContentItem content) {
+    for (final value in Utils.imageUrlsForContent(content)) {
+      if (value.isEmpty ||
+          _emojiImageCache.containsKey(value) ||
+          _loadingEmojiImageUrls.contains(value)) {
+        continue;
+      }
+      _loadingEmojiImageUrls.add(value);
+      final imageProvider = value.startsWith("asset://")
+          ? AssetImage(value.substring("asset://".length))
+          : NetworkImage(value) as ImageProvider;
+      final stream = imageProvider.resolve(ImageConfiguration.empty);
+      late ImageStreamListener listener;
+      listener = ImageStreamListener(
+        (info, _) {
+          _loadingEmojiImageUrls.remove(value);
+          _emojiImageCache[value] = info.image;
+          if (mounted) {
+            setState(() {});
+          }
+          stream.removeListener(listener);
+        },
+        onError: (_, __) {
+          _loadingEmojiImageUrls.remove(value);
+          stream.removeListener(listener);
+        },
+      );
+      stream.addListener(listener);
+    }
   }
 
   /// 添加弹幕
@@ -128,6 +174,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     if (_trackCount <= 0) {
       return;
     }
+    _precacheEmojiImages(content);
 
     if (content.type == DanmakuItemType.special) {
       if (!_option.hideSpecial) {
@@ -167,24 +214,21 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       }
     } else {
       // 在这里提前创建 Paragraph 缓存防止卡顿
-      final textPainter = TextPainter(
-        text: TextSpan(
-          text: content.text,
-          style: TextStyle(
-            fontSize: _option.fontSize,
-            fontWeight: FontWeight.values[_option.fontWeight],
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final danmakuWidth = textPainter.width;
-      final danmakuHeight = textPainter.height;
+      final contentSize = Utils.measureContent(
+        content,
+        _option.fontSize,
+        _option.fontWeight,
+        _option.emojiScale,
+      );
+      final danmakuWidth = contentSize.width;
+      final danmakuHeight = contentSize.height;
 
       final ui.Paragraph paragraph = Utils.generateParagraph(
         content,
         danmakuWidth,
         _option.fontSize,
         _option.fontWeight,
+        _option.emojiScale,
       );
 
       ui.Paragraph? strokeParagraph;
@@ -194,6 +238,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
           danmakuWidth,
           _option.fontSize,
           _option.fontWeight,
+          _option.emojiScale,
         );
       }
 
@@ -326,6 +371,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     if (_running) {
       setState(() {
         _running = false;
+        _controller.running = false;
       });
       if (_animationController.isAnimating) {
         _animationController.stop();
@@ -342,6 +388,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
     if (!_running) {
       setState(() {
         _running = true;
+        _controller.running = true;
       });
       if (!_animationController.isAnimating) {
         _animationController.repeat();
@@ -362,6 +409,13 @@ class _DanmakuScreenState extends State<DanmakuScreen>
 
     if (option.fontSize != _option.fontSize) {
       needClearParagraph = true;
+    }
+    if (option.emojiScale != _option.emojiScale) {
+      needClearParagraph = true;
+    }
+    if (option.duration != _option.duration) {
+      _animationController.duration = Duration(seconds: option.duration);
+      _staticAnimationController.duration = Duration(seconds: option.duration);
     }
 
     /// 需要隐藏弹幕时清理已有弹幕
@@ -411,6 +465,23 @@ class _DanmakuScreenState extends State<DanmakuScreen>
       _animationController.repeat();
     }
     setState(() {});
+  }
+
+  bool _isSameOption(DanmakuOption a, DanmakuOption b) {
+    return a.fontSize == b.fontSize &&
+        a.fontWeight == b.fontWeight &&
+        a.area == b.area &&
+        a.lineHeight == b.lineHeight &&
+        a.emojiScale == b.emojiScale &&
+        a.duration == b.duration &&
+        a.opacity == b.opacity &&
+        a.hideTop == b.hideTop &&
+        a.hideBottom == b.hideBottom &&
+        a.hideScroll == b.hideScroll &&
+        a.hideSpecial == b.hideSpecial &&
+        a.showStroke == b.showStroke &&
+        a.massiveMode == b.massiveMode &&
+        a.safeArea == b.safeArea;
   }
 
   /// 清空弹幕
@@ -565,6 +636,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                             _danmakuHeight,
                             _running,
                             _tick,
+                            _emojiImageCache,
                           ),
                           child: Container(),
                         );
@@ -587,6 +659,7 @@ class _DanmakuScreenState extends State<DanmakuScreen>
                             _danmakuHeight,
                             _running,
                             _tick,
+                            _emojiImageCache,
                           ),
                           child: Container(),
                         );

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:collection';
+import 'dart:io';
 
 import 'package:canvas_danmaku/models/danmaku_content_item.dart';
 import 'package:flutter/material.dart';
@@ -6,8 +8,10 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:simple_live_core/simple_live_core.dart';
+import 'package:simple_live_tv_app/app/app_style.dart';
 import 'package:simple_live_tv_app/app/constant.dart';
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
+import 'package:simple_live_tv_app/app/desktop_startup_args.dart';
 import 'package:simple_live_tv_app/app/event_bus.dart';
 import 'package:simple_live_tv_app/app/log.dart';
 import 'package:simple_live_tv_app/app/sites.dart';
@@ -15,6 +19,7 @@ import 'package:simple_live_tv_app/app/utils.dart';
 import 'package:simple_live_tv_app/models/db/follow_user.dart';
 import 'package:simple_live_tv_app/models/db/history.dart';
 import 'package:simple_live_tv_app/modules/live_room/player/player_controller.dart';
+import 'package:simple_live_tv_app/services/current_room_service.dart';
 import 'package:simple_live_tv_app/services/db_service.dart';
 import 'package:simple_live_tv_app/services/follow_user_service.dart';
 
@@ -39,7 +44,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   Rx<LiveRoomDetail?> detail = Rx<LiveRoomDetail?>(null);
   var online = 0.obs;
   var followed = false.obs;
+  var specialFollowed = false.obs;
   var liveStatus = false.obs;
+  bool _autoSwitchingRoom = false;
 
   /// 清晰度数据
   RxList<LivePlayQuality> qualites = RxList<LivePlayQuality>();
@@ -60,6 +67,20 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// 是否处于后台
   var isBackground = false;
 
+  /// 自动退出倒计时，单位秒
+  var countdown = 60.obs;
+
+  Timer? autoExitTimer;
+
+  /// 设置的自动关闭时长，单位分钟
+  var autoExitMinutes = 60.obs;
+
+  /// 是否已请求延迟自动关闭
+  var delayAutoExit = false.obs;
+
+  /// 是否启用自动关闭
+  var autoExitEnable = false.obs;
+
   var datetime = "00:00".obs;
 
   void initTimer() {
@@ -75,24 +96,164 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   /// 双击退出Timer
   Timer? doubleClickTimer;
+  final Queue<String> _recentDanmuFingerprints = Queue<String>();
+  final Map<String, int> _recentDanmuCounts = <String, int>{};
+  int _recentDanmuEventsSincePrune = 0;
+  RxList<LiveRepeatedDanmuSummary> liveEventFlows =
+      <LiveRepeatedDanmuSummary>[].obs;
+  LiveRepeatedDanmuAggregator _liveEventFlowAggregator =
+      LiveRepeatedDanmuAggregator();
+  Timer? _liveEventFlowTimer;
 
   @override
   void onInit() {
+    CurrentRoomService.instance.setRoom(site, roomId);
     initTimer();
-    showDanmakuState.value = AppSettingsController.instance.danmuEnable.value;
+    _startLiveEventFlowTimer();
+    initAutoExit();
+    showDanmakuState.value = DesktopStartupArgs.isSecondaryDesktopInstance
+        ? false
+        : AppSettingsController.instance.danmuEnable.value;
     followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
+    specialFollowed.value = DBService.instance.followBox
+            .get("${site.id}_$roomId")
+            ?.isSpecialFollow ??
+        false;
 
     loadData();
 
     super.onInit();
   }
 
+  void initAutoExit() {
+    autoExitEnable.value = AppSettingsController.instance.autoExitEnable.value;
+    autoExitMinutes.value =
+        AppSettingsController.instance.roomAutoExitDuration.value;
+    countdown.value = autoExitMinutes.value * 60;
+    if (autoExitEnable.value) {
+      setAutoExit();
+    }
+  }
+
+  void setAutoExit() {
+    if (!autoExitEnable.value) {
+      autoExitTimer?.cancel();
+      return;
+    }
+    autoExitTimer?.cancel();
+    countdown.value = autoExitMinutes.value * 60;
+    autoExitTimer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+      countdown.value -= 1;
+      if (countdown.value <= 0) {
+        autoExitTimer?.cancel();
+        final delay = await Utils.showAlertDialog(
+          "定时关闭时间已到，是否延迟关闭？",
+          title: "延迟关闭",
+          confirm: "延迟",
+          cancel: "关闭",
+          selectable: true,
+        );
+        if (delay) {
+          delayAutoExit.value = true;
+          showAutoExitSheet();
+          setAutoExit();
+        } else {
+          delayAutoExit.value = false;
+          exit(0);
+        }
+      }
+    });
+  }
+
+  void stopAutoExit() {
+    autoExitEnable.value = false;
+    autoExitTimer?.cancel();
+    countdown.value = autoExitMinutes.value * 60;
+  }
+
   void refreshRoom() {
     //messages.clear();
 
     liveDanmaku.stop();
+    _clearDanmuDedupeState();
 
     loadData();
+  }
+
+  void showAutoExitSheet() {
+    Utils.showRightDialog(
+      child: ListView(
+        padding: AppStyle.edgeInsetsA12,
+        children: [
+          Padding(
+            padding: AppStyle.edgeInsetsA12,
+            child: Text(
+              "定时关闭",
+              style: AppStyle.titleStyleWhite,
+            ),
+          ),
+          Obx(
+            () => SwitchListTile(
+              title: Text(
+                "启用定时关闭",
+                style: Get.textTheme.titleMedium,
+              ),
+              value: autoExitEnable.value,
+              onChanged: (e) {
+                autoExitEnable.value = e;
+                AppSettingsController.instance.setAutoExitEnable(e);
+                if (e) {
+                  setAutoExit();
+                } else {
+                  stopAutoExit();
+                }
+              },
+            ),
+          ),
+          Obx(
+            () => ListTile(
+              enabled: autoExitEnable.value,
+              title: Text(
+                "自动关闭时间：${autoExitMinutes.value ~/ 60}小时${autoExitMinutes.value % 60}分钟",
+                style: Get.textTheme.titleMedium,
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                var value = await showTimePicker(
+                  context: Get.context!,
+                  initialTime: TimeOfDay(
+                    hour: autoExitMinutes.value ~/ 60,
+                    minute: autoExitMinutes.value % 60,
+                  ),
+                  initialEntryMode: TimePickerEntryMode.inputOnly,
+                  builder: (_, child) {
+                    return MediaQuery(
+                      data: Get.mediaQuery.copyWith(
+                        alwaysUse24HourFormat: true,
+                      ),
+                      child: child!,
+                    );
+                  },
+                );
+                if (value == null || (value.hour == 0 && value.minute == 0)) {
+                  return;
+                }
+                var duration =
+                    Duration(hours: value.hour, minutes: value.minute);
+                autoExitMinutes.value = duration.inMinutes;
+                AppSettingsController.instance
+                    .setRoomAutoExitDuration(autoExitMinutes.value);
+                if (autoExitEnable.value) {
+                  setAutoExit();
+                } else {
+                  countdown.value = autoExitMinutes.value * 60;
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 初始化弹幕接收事件
@@ -125,14 +286,24 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         }
       }
 
+      if (_isDuplicateDanmu(msg)) {
+        return;
+      }
+
+      _recordLiveEventFlow(msg);
+
       if (!liveStatus.value || isBackground) {
         return;
       }
 
+      final renderEmoji = AppSettingsController.instance.danmuRenderEmoji.value;
+      final parts = renderEmoji ? _buildDanmakuContentParts(msg.spans) : null;
       addDanmaku([
         DanmakuContentItem(
           msg.message,
           color: Color.fromARGB(255, msg.color.r, msg.color.g, msg.color.b),
+          imageUrls: renderEmoji && parts == null ? msg.imageUrls : null,
+          parts: parts,
         ),
       ]);
     } else if (msg.type == LiveMessageType.online) {
@@ -140,6 +311,190 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     } else if (msg.type == LiveMessageType.superChat) {
       //superChats.add(msg.data);
     }
+  }
+
+  List<DanmakuContentPart>? _buildDanmakuContentParts(
+    List<LiveMessageSpan>? spans,
+  ) {
+    final source = spans ?? const <LiveMessageSpan>[];
+    if (source.isEmpty) {
+      return null;
+    }
+    final parts = <DanmakuContentPart>[];
+    for (final span in source) {
+      if (span.isText) {
+        final text = span.text ?? "";
+        if (text.isNotEmpty) {
+          parts.add(DanmakuContentPart.text(text));
+        }
+      } else if (span.isImage) {
+        final imageUrl = (span.imageUrl ?? "").trim();
+        if (imageUrl.isNotEmpty) {
+          parts.add(DanmakuContentPart.image(imageUrl));
+        }
+      }
+    }
+    return parts.isEmpty ? null : parts;
+  }
+
+  bool _isDuplicateDanmu(LiveMessage msg) {
+    final settings = AppSettingsController.instance;
+    if (!settings.danmuDedupeEnable.value) {
+      return false;
+    }
+    final strictMode = settings.danmuDedupeStrictMode;
+    final fingerprint = _buildDanmuFingerprint(
+      msg,
+      includeUserName: !strictMode,
+    );
+    if (fingerprint == null) {
+      return false;
+    }
+    final windowSize = settings.effectiveDanmuDedupeWindow;
+    final duplicate = _recentDanmuCounts.containsKey(fingerprint);
+    _recentDanmuFingerprints.addLast(fingerprint);
+    _recentDanmuCounts[fingerprint] =
+        (_recentDanmuCounts[fingerprint] ?? 0) + 1;
+    if (strictMode) {
+      _recentDanmuEventsSincePrune = 0;
+      _pruneRecentDanmuFingerprints(windowSize);
+      return duplicate;
+    }
+
+    final step = settings.danmuDedupeStep.value.clamp(1, 20).toInt();
+    _recentDanmuEventsSincePrune += 1;
+    final shouldPrune = _recentDanmuEventsSincePrune >= step ||
+        _recentDanmuFingerprints.length > windowSize + step - 1;
+    if (shouldPrune) {
+      _recentDanmuEventsSincePrune = 0;
+    }
+    if (shouldPrune) {
+      _pruneRecentDanmuFingerprints(windowSize);
+    }
+    return duplicate;
+  }
+
+  void _pruneRecentDanmuFingerprints(int windowSize) {
+    while (_recentDanmuFingerprints.length > windowSize) {
+      final removed = _recentDanmuFingerprints.removeFirst();
+      final count = (_recentDanmuCounts[removed] ?? 0) - 1;
+      if (count <= 0) {
+        _recentDanmuCounts.remove(removed);
+      } else {
+        _recentDanmuCounts[removed] = count;
+      }
+    }
+  }
+
+  String? _buildDanmuFingerprint(
+    LiveMessage msg, {
+    required bool includeUserName,
+  }) {
+    final parts = <String>[];
+    final message = _normalizeDanmuFingerprintPart(msg.message);
+    if (message.isNotEmpty) {
+      parts.add("m:$message");
+    }
+    for (final span in msg.spans ?? const <LiveMessageSpan>[]) {
+      final text = _normalizeDanmuFingerprintPart(span.text ?? "");
+      final imageUrl = _normalizeDanmuFingerprintPart(span.imageUrl ?? "");
+      if (text.isNotEmpty) {
+        parts.add("t:$text");
+      }
+      if (imageUrl.isNotEmpty) {
+        parts.add("i:$imageUrl");
+      }
+    }
+    for (final imageUrl in msg.imageUrls ?? const <String>[]) {
+      final value = _normalizeDanmuFingerprintPart(imageUrl);
+      if (value.isNotEmpty) {
+        parts.add("u:$value");
+      }
+    }
+    if (parts.isEmpty) {
+      return null;
+    }
+    if (!includeUserName) {
+      return parts.join("\u0002");
+    }
+    final userName = _normalizeDanmuFingerprintPart(msg.userName);
+    if (userName.isEmpty) {
+      return null;
+    }
+    return "$userName\u0001${parts.join("\u0002")}";
+  }
+
+  String _normalizeDanmuFingerprintPart(String value) {
+    return value.trim().replaceAll(RegExp(r"\s+"), " ");
+  }
+
+  void _clearDanmuDedupeState() {
+    _recentDanmuFingerprints.clear();
+    _recentDanmuCounts.clear();
+    _recentDanmuEventsSincePrune = 0;
+  }
+
+  void _startLiveEventFlowTimer() {
+    _liveEventFlowTimer?.cancel();
+    _liveEventFlowTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) => _flushLiveEventFlow(),
+    );
+  }
+
+  void _recordLiveEventFlow(LiveMessage msg) {
+    if (msg.userName == "LiveSysMessage") {
+      return;
+    }
+    final settings = AppSettingsController.instance;
+    if (!settings.liveEventFlowEnable.value) {
+      clearLiveEventFlow();
+      return;
+    }
+    final text = _normalizeDanmuFingerprintPart(msg.message);
+    if (text.isEmpty) {
+      return;
+    }
+    _ensureLiveEventFlowAggregatorSettings();
+    _liveEventFlowAggregator.add(text);
+    _flushLiveEventFlow();
+  }
+
+  void _flushLiveEventFlow() {
+    final settings = AppSettingsController.instance;
+    if (!settings.liveEventFlowEnable.value) {
+      clearLiveEventFlow();
+      return;
+    }
+    _ensureLiveEventFlowAggregatorSettings();
+    final summaries = _liveEventFlowAggregator.preview(
+      displayTtl: Duration(
+        seconds: settings.effectiveLiveEventFlowDisplaySeconds,
+      ),
+    );
+    liveEventFlows.assignAll(summaries);
+  }
+
+  void _ensureLiveEventFlowAggregatorSettings() {
+    final settings = AppSettingsController.instance;
+    final countWindow = Duration(
+      seconds: settings.effectiveLiveEventFlowWindowSeconds,
+    );
+    final minDisplayCount = settings.effectiveLiveEventFlowMinCount;
+    if (_liveEventFlowAggregator.countWindow == countWindow &&
+        _liveEventFlowAggregator.minDisplayCount == minDisplayCount) {
+      return;
+    }
+    _liveEventFlowAggregator = LiveRepeatedDanmuAggregator(
+      countWindow: countWindow,
+      minDisplayCount: minDisplayCount,
+    );
+    liveEventFlows.clear();
+  }
+
+  void clearLiveEventFlow() {
+    _liveEventFlowAggregator.clear();
+    liveEventFlows.clear();
   }
 
   /// 接收 WebSocket 关闭消息
@@ -159,7 +514,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// 加载直播间信息
   void loadData() async {
     try {
-      SmartDialog.showLoading(msg: "");
       pageLoadding.value = true;
       detail.value = await site.liveSite.getRoomDetail(roomId: roomId);
 
@@ -178,7 +532,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     } catch (e) {
       SmartDialog.showToast(e.toString());
     } finally {
-      SmartDialog.dismiss(status: SmartStatus.loading);
       pageLoadding.value = false;
     }
   }
@@ -246,6 +599,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   void setPlayer() async {
     currentLineInfo.value = "线路${currentLineIndex + 1}";
     errorMsg.value = "";
+    await initializePlayer();
     player.open(
       Media(
         playUrls[currentLineIndex],
@@ -274,6 +628,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     // 遍历线路，如果全部链接都断开就是直播结束了
     if (playUrls.length - 1 == currentLineIndex) {
       liveStatus.value = false;
+      await _tryAutoSwitchToNextLiveRoom(reason: "live_end");
     } else {
       changePlayLine(currentLineIndex + 1);
 
@@ -299,10 +654,55 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     if (playUrls.length - 1 == currentLineIndex) {
       errorMsg.value = "播放失败";
       SmartDialog.showToast("播放失败:$error");
+      await _tryAutoSwitchToNextLiveRoom(reason: "playback_failure");
     } else {
       //currentLineIndex += 1;
       //setPlayer();
       changePlayLine(currentLineIndex + 1);
+    }
+  }
+
+  Future<void> _tryAutoSwitchToNextLiveRoom({required String reason}) async {
+    final settings = AppSettingsController.instance;
+    final enabled = reason == "live_end"
+        ? settings.autoSwitchNextOnLiveEnd.value
+        : settings.autoSwitchNextOnPlaybackFailure.value;
+    if (!enabled || _autoSwitchingRoom) {
+      return;
+    }
+
+    final liveChannels = FollowUserService.instance.livingList.toList();
+    if (liveChannels.isEmpty) {
+      return;
+    }
+
+    final currentId = "${site.id}_$roomId";
+    final currentIndex =
+        liveChannels.indexWhere((item) => item.id == currentId);
+    final candidates =
+        liveChannels.where((item) => item.id != currentId).toList();
+    if (candidates.isEmpty) {
+      return;
+    }
+
+    FollowUser target;
+    if (currentIndex < 0 || currentIndex >= liveChannels.length - 1) {
+      target = candidates.first;
+    } else {
+      target = liveChannels[currentIndex + 1];
+      if (target.id == currentId) {
+        target = candidates.first;
+      }
+    }
+
+    _autoSwitchingRoom = true;
+    try {
+      SmartDialog.showToast(
+        reason == "live_end" ? "当前直播已结束，已切换到下一个直播间" : "当前直播播放失败，已切换到下一个直播间",
+      );
+      resetRoom(Sites.allSites[target.siteId]!, target.roomId);
+    } finally {
+      _autoSwitchingRoom = false;
     }
   }
 
@@ -345,6 +745,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       ),
     );
     followed.value = true;
+    specialFollowed.value = false;
     EventBus.instance.emit(Constant.kUpdateFollow, id);
     SmartDialog.showToast("已关注");
   }
@@ -361,8 +762,31 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     var id = "${site.id}_$roomId";
     DBService.instance.deleteFollow(id);
     followed.value = false;
+    specialFollowed.value = false;
     EventBus.instance.emit(Constant.kUpdateFollow, id);
     SmartDialog.showToast("已取消关注");
+  }
+
+  void toggleSpecialFollow(bool enabled) {
+    if (detail.value == null) {
+      return;
+    }
+    final id = "${site.id}_$roomId";
+    var follow = DBService.instance.followBox.get(id);
+    follow ??= FollowUser(
+      id: id,
+      roomId: roomId,
+      siteId: site.id,
+      userName: detail.value?.userName ?? "",
+      face: detail.value?.userAvatar ?? "",
+      addTime: DateTime.now(),
+    );
+    follow.isSpecialFollow = enabled;
+    DBService.instance.addFollow(follow);
+    followed.value = true;
+    specialFollowed.value = enabled;
+    EventBus.instance.emit(Constant.kUpdateFollow, id);
+    SmartDialog.showToast(enabled ? "已设为特别关注" : "已取消特别关注");
   }
 
   void resetRoom(Site site, String roomId) async {
@@ -372,9 +796,17 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
     rxSite.value = site;
     rxRoomId.value = roomId;
+    CurrentRoomService.instance.setRoom(site, roomId);
+    followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
+    specialFollowed.value = DBService.instance.followBox
+            .get("${site.id}_$roomId")
+            ?.isSpecialFollow ??
+        false;
 
     // 清除全部消息
     liveDanmaku.stop();
+    _clearDanmuDedupeState();
+    clearLiveEventFlow();
 
     danmakuController?.clear();
 
@@ -397,11 +829,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
     var index = liveChannels
         .indexWhere((element) => element.id == "${site.id}_$roomId");
-    // if (index == -1) {
-    //   //当前频道不在列表中
-
-    //   return;
-    // }
+    if (index == -1) {
+      SmartDialog.showToast("当前直播间不在直播列表中");
+      return;
+    }
     index += 1;
     if (index >= liveChannels.length) {
       index = 0;
@@ -420,11 +851,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
     var index = liveChannels
         .indexWhere((element) => element.id == "${site.id}_$roomId");
-    // if (index == -1) {
-    //   //当前频道不在列表中
-
-    //   return;
-    // }
+    if (index == -1) {
+      SmartDialog.showToast("当前直播间不在直播列表中");
+      return;
+    }
     index -= 1;
     if (index < 0) {
       index = liveChannels.length - 1;
@@ -453,7 +883,10 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   @override
   void onClose() {
+    autoExitTimer?.cancel();
     liveDanmaku.stop();
+    _liveEventFlowTimer?.cancel();
+    clearLiveEventFlow();
 
     danmakuController = null;
     super.onClose();

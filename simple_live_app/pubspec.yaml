@@ -1,5 +1,5 @@
 name: simple_live_app
-version: 1.12.3+11203
+version: 1.12.6+11206
 publish_to: none
 description: "Simple Live APP"
 environment:
@@ -8,6 +8,9 @@ environment:
 dependencies:
   simple_live_core:
     path: ../simple_live_core
+  dart_quickjs:
+    git:
+      url: https://github.com/xiaoyaocz/dart_quickjs
   # 图标
   cupertino_icons: ^1.0.8
   remixicon: ^1.4.1 #Remix图标
@@ -56,6 +59,7 @@ dependencies:
   wakelock_plus: ^1.4.0 #屏幕常亮
   file_picker: ^10.3.7 #文件选择
   window_manager: ^0.5.1 #窗口管理
+  screen_retriever: ^0.2.0 #屏幕范围
   floating: ^6.0.0 #PIP画中画
   flutter_inappwebview: ^6.1.5 #WebView
   connectivity_plus: 7.0.0 #网络状态
@@ -77,6 +81,7 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  sherpa_onnx: ^1.13.2
 
 
 dev_dependencies:
@@ -90,6 +95,14 @@ dev_dependencies:
 dependency_overrides:
   canvas_danmaku:
     path: ../third_party/canvas_danmaku
+  # iOS 未签名/越狱环境下的崩溃修复：
+  # 强制 media_kit 使用 InitializerIsolate（mpv_wait_event 轮询），
+  # 避免 NativeCallable trampoline 被 iOS 17 SPTM 拒绝执行（KERN_PROTECTION_FAILURE）。
+  media_kit:
+    path: ../third_party/media_kit_fix/media_kit
+  # media_kit_video 保持 pub.dev 版（修复仅在 media_kit 本体）
+  media_kit_libs_ios_video:
+    path: ../third_party/media_kit_fix/libs/ios/media_kit_libs_ios_video
 
 flutter_launcher_icons:
   android: true
@@ -104,5 +117,6 @@ flutter:
   assets:
     - assets/statement.txt
     - assets/images/
+    - assets/images/douyin_emoji/
     - assets/icons/
     - assets/lotties/

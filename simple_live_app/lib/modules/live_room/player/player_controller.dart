@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:auto_orientation_v2/auto_orientation_v2.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:file_picker/file_picker.dart';
@@ -20,18 +21,23 @@ import 'package:simple_live_app/app/custom_throttle.dart';
 import 'package:simple_live_app/app/log.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/services/background_playback_service.dart';
+import 'package:simple_live_app/services/mpv_options_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:window_manager/window_manager.dart';
 
 class _DanmakuReplayEntry {
   final String message;
   final Color color;
+  final List<String>? imageUrls;
+  final List<DanmakuContentPart>? parts;
   final DateTime visibleFrom;
   final DateTime visibleUntil;
 
   const _DanmakuReplayEntry({
     required this.message,
     required this.color,
+    this.imageUrls,
+    this.parts,
     required this.visibleFrom,
     required this.visibleUntil,
   });
@@ -59,6 +65,7 @@ mixin PlayerMixin {
 
   /// 初始化播放器并设置 ao 参数
   Future<void> initializePlayer() async {
+    await MpvOptionsService.applyToPlayer(player);
     var pp = player.platform as NativePlayer;
     // 设置音频输出驱动
     if (AppSettingsController.instance.customPlayerOutput.value) {
@@ -78,25 +85,13 @@ mixin PlayerMixin {
   /// 视频控制器
   late final videoController = VideoController(
     player,
-    configuration: AppSettingsController.instance.customPlayerOutput.value
-        ? VideoControllerConfiguration(
-            vo: AppSettingsController.instance.videoOutputDriver.value,
-            hwdec: AppSettingsController.instance.videoHardwareDecoder.value,
-          )
-        : AppSettingsController.instance.playerCompatMode.value
-            ? const VideoControllerConfiguration(
-                vo: 'mediacodec_embed',
-                hwdec: 'mediacodec',
-              )
-            : VideoControllerConfiguration(
-                enableHardwareAcceleration:
-                    AppSettingsController.instance.hardwareDecode.value,
-                androidAttachSurfaceAfterVideoParameters: false,
-              ),
+    configuration: MpvOptionsService.videoControllerConfiguration(),
   );
 }
 
 mixin PlayerStateMixin on PlayerMixin {
+  bool _playerClosing = false;
+
   ///音量控制条计时器
   Timer? hidevolumeTimer;
 
@@ -105,6 +100,11 @@ mixin PlayerStateMixin on PlayerMixin {
 
   /// 是否显示弹幕
   RxBool showDanmakuState = false.obs;
+
+  RxBool mutedState = false.obs;
+  double _volumeBeforeMute = 100.0;
+
+  void onPlayerWindowModeExited() {}
 
   /// 是否显示控制器
   RxBool showControlsState = false.obs;
@@ -290,6 +290,8 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
     String message,
     Color color, {
     Duration delay = Duration.zero,
+    List<String>? imageUrls,
+    List<DanmakuContentPart>? parts,
   }) {
     var durationSeconds =
         AppSettingsController.instance.danmuSpeed.value.toInt();
@@ -302,6 +304,8 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
       _DanmakuReplayEntry(
         message: message,
         color: color,
+        imageUrls: imageUrls,
+        parts: parts,
         visibleFrom: visibleFrom,
         visibleUntil: visibleFrom.add(Duration(seconds: durationSeconds)),
       ),
@@ -349,6 +353,8 @@ mixin PlayerDanmakuMixin on PlayerStateMixin {
         DanmakuContentItem(
           item.message,
           color: item.color,
+          imageUrls: item.imageUrls,
+          parts: item.parts,
         ),
       );
     }
@@ -408,7 +414,7 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       overlays: SystemUiOverlay.values,
     );
 
-    await setPortraitOrientation();
+    await resetPreferredOrientation();
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
       // 亮度重置,桌面平台可能会报错,暂时不处理桌面平台的亮度
       try {
@@ -430,22 +436,37 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     fullScreenState.value = true;
     if (Platform.isAndroid || Platform.isIOS) {
       //全屏
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
+      await SystemChrome.setEnabledSystemUIMode(
+        SystemUiMode.manual,
+        overlays: [],
+      );
       if (!isVertical.value) {
         //横屏
-        setLandscapeOrientation();
+        await setLandscapeOrientation();
       }
     } else {
       _windowMaximizedBeforeFullScreen = await windowManager.isMaximized();
       if (_windowMaximizedBeforeFullScreen) {
-        final maximizedBounds = await windowManager.getBounds();
         await windowManager.restore();
         await _waitForWindowMaximizedState(false);
-        await _waitForWindowBoundsToChange(maximizedBounds);
-        await Future.delayed(const Duration(milliseconds: 120));
+        await windowManager.setSize(const Size(1280, 720));
+        await windowManager.center();
+        await Future.delayed(const Duration(milliseconds: 240));
       }
-      await windowManager.setFullScreen(true);
+      await _applyWindowsFullScreenChrome();
       await Future.delayed(const Duration(milliseconds: 16));
+      await windowManager.setFullScreen(true);
+      await _waitForWindowsFullScreenState(true);
+      await _applyWindowsFullScreenChrome();
+      unawaited(
+        Future.delayed(const Duration(milliseconds: 900), () async {
+          if (!fullScreenState.value || smallWindowState.value) {
+            return;
+          }
+          await _applyWindowsFullScreenChrome();
+        }),
+      );
+      await Future.delayed(const Duration(milliseconds: 32));
     }
     //danmakuController?.clear();
   }
@@ -469,11 +490,12 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
         SystemUiMode.edgeToEdge,
         overlays: SystemUiOverlay.values,
       );
-      await setPortraitOrientation();
+      await resetPreferredOrientation();
       await Future.delayed(const Duration(milliseconds: 32));
     } else {
       await windowManager.setFullScreen(false);
-      await Future.delayed(const Duration(milliseconds: 16));
+      await _waitForWindowsFullScreenState(false);
+      await _restoreWindowsWindowChrome();
       await _refreshWindowsWindowBounds();
       if (_windowMaximizedBeforeFullScreen) {
         await windowManager.maximize();
@@ -482,6 +504,7 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       _windowMaximizedBeforeFullScreen = false;
     }
     fullScreenState.value = false;
+    onPlayerWindowModeExited();
 
     //danmakuController?.clear();
   }
@@ -499,6 +522,21 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     final deadline = DateTime.now().add(const Duration(milliseconds: 600));
     while (DateTime.now().isBefore(deadline)) {
       if (await windowManager.isMaximized() == value) {
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 16));
+    }
+  }
+
+  Future<void> _waitForWindowsFullScreenState(bool value) async {
+    if (!Platform.isWindows) {
+      await Future.delayed(const Duration(milliseconds: 16));
+      return;
+    }
+
+    final deadline = DateTime.now().add(const Duration(milliseconds: 800));
+    while (DateTime.now().isBefore(deadline)) {
+      if (await windowManager.isFullScreen() == value) {
         return;
       }
       await Future.delayed(const Duration(milliseconds: 16));
@@ -542,7 +580,36 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     }
   }
 
+  Future<void> _applyWindowsFullScreenChrome() async {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    try {
+      await windowManager.setAsFrameless();
+      await windowManager.setResizable(false);
+      await windowManager.setHasShadow(false);
+      await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  }
+
   ///小窗模式()
+  Future<void> _restoreWindowsWindowChrome() async {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    try {
+      await windowManager.setResizable(true);
+      await windowManager.setHasShadow(true);
+      await windowManager.setTitleBarStyle(TitleBarStyle.normal);
+    } catch (e) {
+      Log.logPrint(e);
+    }
+  }
+
   Future<void> enterSmallWindow() async {
     if (Platform.isAndroid || Platform.isIOS || smallWindowState.value) {
       return;
@@ -579,7 +646,7 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     }
 
     await windowManager.setAlwaysOnTop(true);
-    rebuildDanmakuView();
+    danmakuController?.resume();
   }
 
   ///退出小窗模式()
@@ -605,7 +672,8 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       await _refreshWindowsWindowBounds();
     }
     _windowMaximizedBeforeSmallWindow = false;
-    rebuildDanmakuView();
+    danmakuController?.resume();
+    onPlayerWindowModeExited();
     //windowManager.setAlignment(Alignment.center);
   }
 
@@ -624,7 +692,39 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     if (!showDanmakuState.value) {
       danmakuController?.clear();
     } else {
-      rebuildDanmakuView(clearCurrent: false);
+      danmakuController?.resume();
+    }
+  }
+
+  Future<void> toggleMute() async {
+    if (mutedState.value) {
+      final restoreVolume =
+          _volumeBeforeMute <= 0 ? 100.0 : _volumeBeforeMute.clamp(0.0, 100.0);
+      await setSessionPlayerVolume(restoreVolume);
+      return;
+    }
+    _volumeBeforeMute = player.state.volume <= 0
+        ? AppSettingsController.instance.playerVolume.value
+        : player.state.volume;
+    mutedState.value = true;
+    await player.setVolume(0);
+  }
+
+  Future<void> setSessionPlayerVolume(
+    double volume, {
+    bool persist = false,
+  }) async {
+    final value = volume.clamp(0.0, 100.0).toDouble();
+    if (value <= 0) {
+      mutedState.value = true;
+      await player.setVolume(0);
+    } else {
+      mutedState.value = false;
+      _volumeBeforeMute = value;
+      await player.setVolume(value);
+    }
+    if (persist) {
+      AppSettingsController.instance.setPlayerVolume(value);
     }
   }
 
@@ -633,7 +733,7 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
     if (await beforeIOS16()) {
       AutoOrientation.landscapeAutoMode();
     } else {
-      SystemChrome.setPreferredOrientations([
+      await SystemChrome.setPreferredOrientations([
         DeviceOrientation.landscapeLeft,
         DeviceOrientation.landscapeRight,
       ]);
@@ -644,6 +744,17 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
   Future setPortraitOrientation() async {
     if (await beforeIOS16()) {
       AutoOrientation.portraitAutoMode();
+    } else {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
+    }
+  }
+
+  /// 恢复系统方向，避免平板横屏返回后仍被锁定为手机竖屏。
+  Future resetPreferredOrientation() async {
+    if (await beforeIOS16()) {
+      AutoOrientation.fullAutoMode();
     } else {
       await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     }
@@ -710,6 +821,108 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
 
   /// 开启小窗播放前弹幕状态
   bool danmakuStateBeforePIP = false;
+  bool _pipStateApplied = false;
+  bool _autoPipOnLeaveConfigured = false;
+
+  Rational _resolvePipAspectRatio() {
+    final width = player.state.width ?? 0;
+    final height = player.state.height ?? 0;
+    if (height > width) {
+      return const Rational.vertical();
+    }
+    return const Rational.landscape();
+  }
+
+  math.Rectangle<int>? _buildPipSourceRectHint() {
+    final context = globalPlayerKey.currentContext;
+    if (context == null) {
+      return null;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) {
+      return null;
+    }
+    final offset = renderObject.localToGlobal(Offset.zero);
+    final pixelRatio = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    return math.Rectangle<int>(
+      (offset.dx * pixelRatio).round(),
+      (offset.dy * pixelRatio).round(),
+      (renderObject.size.width * pixelRatio).round(),
+      (renderObject.size.height * pixelRatio).round(),
+    );
+  }
+
+  void _ensurePipStatusListener() {
+    _pipSubscription ??= pip.pipStatusStream.listen((event) {
+      if (event == PiPStatus.enabled) {
+        _applyPipEnteredState();
+      } else if (event == PiPStatus.disabled) {
+        _restorePipExitedState();
+      }
+      Log.w(event.toString());
+    });
+  }
+
+  void _applyPipEnteredState() {
+    if (_pipStateApplied) {
+      return;
+    }
+    _pipStateApplied = true;
+    danmakuStateBeforePIP = showDanmakuState.value;
+    if (AppSettingsController.instance.pipHideDanmu.value &&
+        danmakuStateBeforePIP) {
+      showDanmakuState.value = false;
+    }
+    showControlsState.value = false;
+  }
+
+  void _restorePipExitedState() {
+    if (!_pipStateApplied && !_autoPipOnLeaveConfigured) {
+      return;
+    }
+    _pipStateApplied = false;
+    _autoPipOnLeaveConfigured = false;
+    showDanmakuState.value = danmakuStateBeforePIP;
+    if (showDanmakuState.value) {
+      danmakuController?.resume();
+    }
+  }
+
+  Future<void> cancelAutoPipOnLeave() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    _autoPipOnLeaveConfigured = false;
+    try {
+      await pip.cancelOnLeavePiP();
+    } catch (e) {
+      Log.d("取消自动小窗失败: $e");
+    }
+  }
+
+  Future<bool> prepareAutoPipOnLeave() async {
+    if (!Platform.isAndroid || _autoPipOnLeaveConfigured) {
+      return _autoPipOnLeaveConfigured;
+    }
+    if (await pip.isPipAvailable == false) {
+      return false;
+    }
+    _ensurePipStatusListener();
+    try {
+      await pip.enable(
+        OnLeavePiP(
+          aspectRatio: _resolvePipAspectRatio(),
+          sourceRectHint: _buildPipSourceRectHint(),
+        ),
+      );
+      _autoPipOnLeaveConfigured = true;
+      showControlsState.value = false;
+      return true;
+    } catch (e) {
+      Log.d("配置退后台自动小窗失败: $e");
+      return false;
+    }
+  }
 
   Future enablePIP() async {
     if (!Platform.isAndroid) {
@@ -719,41 +932,14 @@ mixin PlayerSystemMixin on PlayerMixin, PlayerStateMixin, PlayerDanmakuMixin {
       SmartDialog.showToast("设备不支持小窗播放");
       return;
     }
-    danmakuStateBeforePIP = showDanmakuState.value;
-    //关闭并清除弹幕
-    if (AppSettingsController.instance.pipHideDanmu.value &&
-        danmakuStateBeforePIP) {
-      showDanmakuState.value = false;
-    }
-    danmakuController?.clear();
-    //关闭控制器
-    showControlsState.value = false;
-
-    //监听事件
-    var width = player.state.width ?? 0;
-    var height = player.state.height ?? 0;
-    Rational ratio = const Rational.landscape();
-    if (height > width) {
-      ratio = const Rational.vertical();
-    } else {
-      ratio = const Rational.landscape();
-    }
+    await cancelAutoPipOnLeave();
+    _ensurePipStatusListener();
     await pip.enable(
       ImmediatePiP(
-        aspectRatio: ratio,
+        aspectRatio: _resolvePipAspectRatio(),
+        sourceRectHint: _buildPipSourceRectHint(),
       ),
     );
-
-    _pipSubscription ??= pip.pipStatusStream.listen((event) {
-      if (event == PiPStatus.disabled) {
-        danmakuController?.clear();
-        showDanmakuState.value = danmakuStateBeforePIP;
-        if (showDanmakuState.value) {
-          rebuildDanmakuView();
-        }
-      }
-      Log.w(event.toString());
-    });
   }
 }
 mixin PlayerGestureControlMixin
@@ -841,6 +1027,7 @@ mixin PlayerGestureControlMixin
     leftVerticalDrag = details.globalPosition.dx < Get.width / 2;
 
     throttle = DelayedThrottle(200);
+    lastVolume = -1;
 
     verticalDragging = true;
     if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) {
@@ -911,7 +1098,8 @@ mixin PlayerGestureControlMixin
 
   Future _realSetVolume(int volume) async {
     Log.logPrint(volume);
-    VolumeController.instance.setVolume(volume / 100);
+    // 手势只调系统音量，播放器内部音量由独立设置控制。
+    await VolumeController.instance.setVolume(volume / 100);
   }
 
   void setGestureBrightness(double dy) {
@@ -975,6 +1163,11 @@ class PlayerController extends BaseController
   StreamSubscription? _logSubscription;
   StreamSubscription? _playingSubscription;
 
+  // Fix Issue #57: 流错误重试计数器
+  int _streamErrorRetryCount = 0;
+  DateTime? _lastStreamErrorTime;
+  Timer? _surfaceHealthCheckTimer;
+
   void initStream() {
     _errorSubscription = player.stream.error.listen((event) {
       Log.d("播放器错误：$event");
@@ -983,6 +1176,13 @@ class PlayerController extends BaseController
       if (event.contains('no sound.')) {
         return;
       }
+
+      // Fix Issue #57: 检测流错误并自动重试
+      if (_isStreamError(event)) {
+        _handleStreamError(event);
+        return;
+      }
+
       //SmartDialog.showToast(event);
       mediaError(event);
     });
@@ -992,6 +1192,8 @@ class PlayerController extends BaseController
         WakelockPlus.enable();
         unawaited(_syncBackgroundPlaybackService(true));
         Log.d("Playing");
+        // 播放成功，重置流错误计数
+        _streamErrorRetryCount = 0;
       }
     });
 
@@ -1006,15 +1208,38 @@ class PlayerController extends BaseController
     _widthSubscription = player.stream.width.listen((event) {
       Log.d(
           'width:$event  W:${(player.state.width)}  H:${(player.state.height)}');
+
+      // Fix Issue #57: 检测异常的视频尺寸
+      if (event == null || event <= 0) {
+        if (player.state.playing) {
+          Log.w("播放器宽度异常: $event (播放中)，可能是Surface失效");
+          _handleInvalidVideoSize();
+        }
+        return;
+      }
+
       isVertical.value =
           (player.state.height ?? 9) > (player.state.width ?? 16);
     });
     _heightSubscription = player.stream.height.listen((event) {
       Log.d(
           'height:$event  W:${(player.state.width)}  H:${(player.state.height)}');
+
+      // Fix Issue #57: 检测异常的视频尺寸
+      if (event == null || event <= 0) {
+        if (player.state.playing) {
+          Log.w("播放器高度异常: $event (播放中)，可能是Surface失效");
+          _handleInvalidVideoSize();
+        }
+        return;
+      }
+
       isVertical.value =
           (player.state.height ?? 9) > (player.state.width ?? 16);
     });
+
+    // Fix Issue #57: 启动Surface健康检查
+    _startSurfaceHealthCheck();
   }
 
   void disposeStream() {
@@ -1025,6 +1250,104 @@ class PlayerController extends BaseController
     _logSubscription?.cancel();
     _pipSubscription?.cancel();
     _playingSubscription?.cancel();
+    _surfaceHealthCheckTimer?.cancel();
+  }
+
+  // Fix Issue #57: 判断是否为流错误（网络/解码错误）
+  bool _isStreamError(String error) {
+    return error.contains('mbedtls_ssl_read') ||
+        error.contains('Packet corrupt') ||
+        error.contains('Packet corupt') ||
+        error.contains('tls:') ||
+        error.contains('Invalid NAL unit') ||
+        error.contains('missing picture');
+  }
+
+  // Fix Issue #57: 处理流错误，自动重试
+  Future<void> _handleStreamError(String error) async {
+    final now = DateTime.now();
+
+    // 防止短时间内重复触发
+    if (_lastStreamErrorTime != null &&
+        now.difference(_lastStreamErrorTime!) < const Duration(seconds: 2)) {
+      return;
+    }
+    _lastStreamErrorTime = now;
+
+    if (_streamErrorRetryCount >= 3) {
+      Log.e("流错误重试次数已达上限(3次)，停止重试: $error", StackTrace.current);
+      mediaError(error);
+      return;
+    }
+
+    _streamErrorRetryCount++;
+    Log.w(
+      "检测到流错误，自动重试解码器 ($_streamErrorRetryCount/3): $error",
+      false,
+    );
+
+    // 等待1秒后重新打开当前流
+    await Future.delayed(const Duration(seconds: 1));
+
+    try {
+      final currentMedia = player.state.playlist.medias.isNotEmpty
+          ? player.state.playlist.medias[player.state.playlist.index]
+          : null;
+
+      if (currentMedia != null && !_playerClosing) {
+        Log.i("正在重启解码器...");
+        await player.pause();
+        await Future.delayed(const Duration(milliseconds: 200));
+        await player.open(currentMedia);
+      }
+    } catch (e, stackTrace) {
+      Log.e("重启解码器失败: $e", stackTrace);
+      mediaError(error);
+    }
+  }
+
+  // Fix Issue #57: 处理异常的视频尺寸（Surface失效）
+  Future<void> _handleInvalidVideoSize() async {
+    Log.w("检测到视频尺寸异常，尝试恢复Surface");
+
+    // 短暂暂停再恢复，触发Surface重建
+    try {
+      if (player.state.playing && !_playerClosing) {
+        await player.pause();
+        await Future.delayed(const Duration(milliseconds: 300));
+        await player.play();
+      }
+    } catch (e, stackTrace) {
+      Log.e("恢复Surface失败: $e", stackTrace);
+    }
+  }
+
+  // Fix Issue #57: Surface健康检查（每3秒检查一次）
+  void _startSurfaceHealthCheck() {
+    if (!Platform.isAndroid) {
+      return; // 仅Android需要
+    }
+
+    _surfaceHealthCheckTimer?.cancel();
+    _surfaceHealthCheckTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (timer) {
+        if (_playerClosing) {
+          timer.cancel();
+          return;
+        }
+
+        // 检测：播放中但尺寸为null = Surface异常
+        if (player.state.playing &&
+            (player.state.width == null || player.state.height == null)) {
+          Log.w(
+            "Surface健康检查失败: playing=${player.state.playing} "
+            "width=${player.state.width} height=${player.state.height}",
+          );
+          _handleInvalidVideoSize();
+        }
+      },
+    );
   }
 
   void mediaEnd() {
@@ -1153,9 +1476,11 @@ class PlayerController extends BaseController
     );
   }
 
-  @override
-  void onClose() async {
-    Log.w("播放器关闭");
+  Future<void> closePlayerResources() async {
+    if (_playerClosing) {
+      return;
+    }
+    _playerClosing = true;
     await stopBackgroundPlaybackService();
     await player.stop();
     if (smallWindowState.value) {
@@ -1165,6 +1490,12 @@ class PlayerController extends BaseController
     disposeDanmakuController();
     await resetSystem();
     await player.dispose();
+  }
+
+  @override
+  void onClose() async {
+    Log.w("播放器关闭");
+    await closePlayerResources();
     super.onClose();
   }
 }

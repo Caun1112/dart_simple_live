@@ -57,6 +57,7 @@ class BaseController extends GetxController {
 }
 
 class BasePageController<T> extends BaseController {
+  static const Duration refreshCooldown = Duration(seconds: 2);
   final ScrollController scrollController = ScrollController();
   final EasyRefreshController easyRefreshController = EasyRefreshController();
   int currentPage = 1;
@@ -65,8 +66,31 @@ class BasePageController<T> extends BaseController {
   int pageSize = 24;
   var canLoadMore = false.obs;
   var list = <T>[].obs;
+  DateTime? _lastRefreshAt;
+
+  bool get isRefreshCoolingDown {
+    final lastRefreshAt = _lastRefreshAt;
+    return lastRefreshAt != null &&
+        DateTime.now().difference(lastRefreshAt) < refreshCooldown;
+  }
+
+  void showRefreshCooldownToast() {
+    SmartDialog.showToast("刷新太频繁，请稍后再试");
+  }
+
+  bool tryBeginRefresh({bool showToast = true}) {
+    if (isRefreshCoolingDown) {
+      if (showToast) {
+        showRefreshCooldownToast();
+      }
+      return false;
+    }
+    _lastRefreshAt = DateTime.now();
+    return true;
+  }
 
   Future refreshData() async {
+    if (!tryBeginRefresh()) return;
     currentPage = 1;
     list.value = [];
     await loadData();

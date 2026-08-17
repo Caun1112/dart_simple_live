@@ -217,6 +217,20 @@ class AppStyle {
     );
   }
 
+  static EdgeInsets bottomSheetPadding({
+    double left = 0,
+    double top = 0,
+    double right = 0,
+    double bottom = 12,
+  }) {
+    return EdgeInsets.fromLTRB(
+      left,
+      top,
+      right,
+      bottomBarHeight + bottom,
+    );
+  }
+
   static Divider get divider => Divider(
         height: 1,
         thickness: 1,

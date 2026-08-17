@@ -24,17 +24,25 @@
 
 ## 支持项目
 
-Simple Live 会继续保持开源和免费使用。
+Simple Live 会继续保持开源和免费使用。赞助费用主要用于同步服务、域名和构建测试等维护开销。
 
-如果这个项目刚好帮到了你，也可以请我喝杯 coffee，或者补一点 token、同步服务域名、Workers 之类的维护费用。
+更多社区反馈与赞助鸣谢见 [THANKS.md](/THANKS.md)。
 
 <p align="center">
   <img width="360" src="/assets/support_wechat.png" alt="微信收款码">
 </p>
 
+## 用户群
+
+扫码加入 SimpleLive 用户群，交流使用问题和反馈建议。
+
+<p align="center">
+  <img width="360" src="/assets/user_group_wechat.jpg" alt="SimpleLive 用户群二维码">
+</p>
+
 ## Release 资产
 
-在我的设备Windows+安卓+TV模拟设备上实际测试，release内的功能和bug修复均完成。
+Release 资产会在 Windows、Android 和 TV 模拟环境完成基础验证后发布。
 
 当前提供这些正式资产：
 
@@ -43,7 +51,6 @@ Simple Live 会继续保持开源和免费使用。
 - Windows `zip`
 - Linux `zip`
 - Linux `deb`
-- source code zip
 
 ## 远程同步服务
 
@@ -80,9 +87,9 @@ Simple Live 会继续保持开源和免费使用。
 - 支持导入新版 `simple_live_profile.json`。
 - 支持导入旧版 `simple_live_config.json`，但旧版“其他设置导出”本身通常只包含设置和弹幕屏蔽词，不一定包含关注列表。
 - 支持兼容旧 WebDAV/同步备份里的关注、标签、历史数组格式。
-- 如果旧备份文件仍然提示格式错误，或关注列表没有恢复，可以带上备份文件和报错信息联系作者，我会帮忙转换格式或继续补兼容。
+- 如果旧备份文件仍然提示格式错误，或关注列表没有恢复，可以提交备份文件样例和报错信息用于补充兼容。
 
-TV 版已在本地 `Android Emulator - Medium_Phone`（`Android 16 / API 36 / x86_64`）验证通过，虎牙、斗鱼、抖音直播均可正常出画面。当前这版 TV 播放建议保持 `硬件解码` 开启。
+TV 版已在 `Android Emulator - Medium_Phone`（`Android 16 / API 36 / x86_64`）完成基础验证，虎牙、斗鱼、抖音直播可正常播放。TV 播放建议保持 `硬件解码` 开启。
 
 TV 下载建议：
 
@@ -90,6 +97,26 @@ TV 下载建议：
 - `SimpleLive-TV-armeabi-v7a-release.apk`：适合较老的 32 位安卓电视设备。
 - `SimpleLive-TV-x86_64-release.apk`：适合 Android Studio / AVD 模拟器等 `x86_64` 环境。
 - 如果不确定设备架构，优先看系统信息里的 `arm64-v8a / armeabi-v7a / x86_64`，不要盲下“最新版”。
+
+## 实时字幕
+
+当前版本暂时下线实时字幕入口，相关开关、样式和模型说明不再对外展示。
+
+## 抖音搜索 Cookie
+
+抖音播放可以使用内置 `ttwid` 兜底，但房间名 / 主播名搜索经常要求登录态。搜索不可用时，需要在 `账号管理 -> 抖音 -> Cookie登录` 粘贴桌面浏览器登录后的完整 Cookie，不要只粘贴单个 `ttwid`。
+
+电脑端获取方式：
+
+- 在浏览器打开 `www.douyin.com` 或 `live.douyin.com` 并登录。
+- 按 `F12` 打开开发者工具，切到 `Network / 网络`。
+- 刷新页面或随便点一次页面，让浏览器产生一个抖音域名请求。
+- 点开任意 `douyin.com` 请求，在 `Request Headers / 请求标头` 找到 `cookie`。
+- 复制 `cookie` 后面完整的一大串，粘贴到 SimpleLive 的抖音 Cookie 登录框。
+
+应用也兼容直接粘贴 `Cookie: xxx`，或粘贴浏览器复制出来的整段请求头；会自动从其中提取 `cookie` 字段。Android / iOS 端只保留粘贴 Cookie 和文件导入，搜索 Cookie 建议仍从电脑浏览器获取后粘贴或同步。TV 端不内置浏览器，请从主 App 同步完整 Cookie。
+
+抖音账号页会尝试从完整 Cookie 的 `sid_guard` 中解析预计剩余有效期；如果只配置了 `ttwid`，或请求头 Cookie 里没有可解析的过期信息，会提示有效期无法判断。Cookie 仍可能因退出登录、改密或平台风控提前失效。
 
 ## 支持直播平台
 
@@ -112,87 +139,42 @@ TV 下载建议：
 - Windows / Android / Android TV 本地 Flutter：`3.41.9`
 - Linux 本地 WSL Flutter：`3.38.10`
 
-## 当前已完成的改动 2026.5.18
+## 版本重点 2026.6.4
 
-### 全平台通用
+主 App 版本为 `v1.12.5`，TV 端版本为 `tv_v1.7.6`；本地 release 目录对应 `release/v1.12.5` 和 `release/tv_v1.7.6`。完整更新记录见 [Update.md](/Update.md)。
 
-- `fix:` 修复聊天区用户名和内容的首尾空格问题，并修复用户名过长时单独换行的问题。
-- `fix:` 修复虎牙头条 / SC 显示异常、重复刷新、价格异常和旧数据残留问题。
-- `fix:` 修复虎牙 / B站直播间在没有头条或 SC 时无任何提示的问题，补上明确空状态。
-- `fix:` 修复直播间内“正在连接弹幕服务器”“线路选择”“线路 N”等中文文案乱码，并继续统一按 `UTF-8` 维护中文文案与注释。
-- `fix:` 修复直播间内通过推荐 / 历史再次进房时出现的页面套娃、返回黑屏和房间切换异常问题。
-- `fix:` 修复直播间内关注列表只显示开播主播的问题，补齐“全部 / 直播中 / 未开播”筛选能力。
-- `fix:` 修复 B站贡献榜重复更新、刷新异常的问题，并改进贡献榜按需刷新逻辑。
-- `optimize:` 弹幕显示从“上下间距”调整为“显示几行”，并根据显示区域和字体大小动态计算。
-- `optimize:` 弹幕延迟支持按平台单独微调。
-- `optimize:` 贡献榜增加前十、粉丝牌、高贡献等筛选。
-- `optimize:` 分类页在缺少原始图标时提供统一占位图标。
-- `optimize:` 同类推荐、观看历史、用户快捷操作等直播间交互继续补强，并避免在直播间内部重复套娃导航。
-- `update:` 弹幕屏蔽升级为分平台管理，并支持关键词 / 用户分别一键清空。
-- `update:` 弹幕屏蔽预设支持导入、导出、编辑和保存覆盖。
-- `update:` 直播间内点击用户名或整条弹幕都可进行屏蔽、临时禁言、备注、复制、批量恢复等操作，并支持复制弹幕内容。
-- `update:` 新增 `B站 / 抖音 / 斗鱼` 贡献榜或亲密榜展示能力。
-- `fix:` 修复抖音弹幕 WebSocket 请求头、ACK 字段错位与备用节点回落，提升长连接稳定性。
-- `fix:` 修复关注列表刷新过程中并发计数器竞争导致刷新状态卡住或最终聚合漏调用的问题。
-- `update:` 新增配置包 schema v2，支持设置 / 关注 / 历史 / 弹幕屏蔽 / 分平台屏蔽用户 / 屏蔽预设的合并或覆盖导入导出，本地局域网同步与 WebDAV 备份均接入同一套 v2 JSON。
-- `update:` 直播间新增全局快捷键（`F` 切换全屏、`D` 开关弹幕、`Esc` 退出全屏 / 小窗）以及"允许后台继续播放"开关。
-- `update:` 新增实时字幕实验框架，预留 `LiveSubtitleEngine` 抽象与设置项；当前不内置模型、不下载模型、不做真实推理。
+### 主要变更
 
-### Windows
+- `update:` 桌面端直播间非全屏状态新增右侧栏折叠功能，方便多开时让播放器占用更多窗口空间；移动端、全屏和小窗布局保持原有习惯。
+- `fix:` 桌面端直播间非全屏去掉内部顶栏，改为浮层返回 / 更多按钮，避免 Windows 顶部灰色空白带挤占播放区域。
+- `fix:` iOS 非全屏直播页使用明确 16:9 播放器尺寸的布局，规避 iPadOS 横屏白屏但有声音的问题。
+- `update:` 重复弹幕过滤新增“刷屏严父”模式，忽略用户只按弹幕内容全局去重，主 App 全平台和 TV 端均生效。
+- `update:` 切到“刷屏严父”会自动开启重复过滤、窗口重置为默认 10 条并隐藏过滤步长；窗口可在 5 到 100 条内调整，超过 20 条时提示弹幕可能明显变少。
+- `update:` iOS 直播间普通状态支持左侧边缘滑动返回（issue [#39](https://github.com/June6699/dart_simple_live/issues/39)，感谢 @LakeWithOcean），并使用 Cupertino 风格路由转场；全屏状态仍保持返回时先退出全屏。
+- `update:` 完善抖音直播弹幕本地表情显示，内置 141 个抖音平台表情资源，并支持本地 `asset://` 表情资源渲染；表情参考感谢 [EmojiAll 抖音平台表情](https://www.emojiall.com/zh-hans/platform-douyin)。
+- `fix:` B 站弹幕表情改为富文本片段渲染，避免源码文本和表情图重复显示。
+- `fix:` TV 端关注列表改为分页加载，关注刷新加入冷却和任务互斥，同步关注列表改为批量写入，降低大量关注场景下的闪退风险。
+- `perf:` 大量关注导入 / 本地同步 / 房间同步 / WebDAV 恢复按数据规模分批处理，历史记录批量合并写入，关注状态刷新并发改为后台自动判断。
+- `fix:` 删除关注页“读取中”分组，未知状态按未开播处理；关注页记住上次分组模式和选中分组。
+- `fix:` 搜索页改为按平台 `siteId` 记忆，避免配置同步或平台排序变化后选错平台。
+- `fix:` 排查 issue #37，1.12.4 Windows 白屏更像发布包 / 构建链或运行时依赖差异，源码侧未发现 Windows runner / `main.dart` 启动链路变更。
+- `release:` 更新 JSON 与本地 release 说明切换为正式 `v1.12.5` / `tv_v1.7.6`，移除预发布下载链接与 prerelease 标记。
 
-- `fix:` 修复直播间标题居中逻辑被右侧操作栏影响的问题，改为按实际直播画面区域计算视觉中心。
-- `fix:` 修复 Windows 小窗、全屏、窗口恢复、鼠标自动隐藏、悬浮控制区闪动等一系列桌面播放器问题。
+### 验证状态
 
-### Android
+- 主 App：`flutter analyze` 通过，`No issues found`。
+- TV App：`flutter analyze` 通过，`No issues found`。
+- Core：`dart test test/live_repeated_danmu_summary_test.dart` 通过。
+- 本地 release 目录已准备：`release/v1.12.5`、`release/tv_v1.7.6`；macOS / iOS 按策略由 GitHub Actions 手动 workflow 构建。
+- 待真实设备继续验证：桌面多开右侧栏折叠、严父模式高弹幕量误过滤、TV 端大量关注列表、抖音本地表情显示效果。
 
-- `fix:` 修复安卓后台恢复与直播间恢复逻辑，提升应用被系统回收后的可恢复性。
-- `fix:` 修复安卓端全屏下从历史 / 关注 / 推荐打开右侧列表时一闪就消失的问题。
-- `fix:` 修复“我的”里的直播设置、弹幕设置等长页面与安卓虚拟导航栏重叠的问题。
+## 后续目标
 
-### Android TV
-
-- `fix:` TV 播放已在本地 `Android Emulator - Medium_Phone`（`Android 16 / API 36 / x86_64`）验证通过，虎牙、斗鱼、抖音均正常出画面；当前建议保持 `硬件解码` 开启。
-- `update:` TV 更新检查已切换到当前公开仓库的版本说明与下载页，不再继续指向上游仓库。
-- `update:` TV 设置页补充黑屏排查提示，方便在没有设备的情况下给用户明确的兼容性操作建议。
-- `fix:` 修复 TV 端抖音弹幕 WebSocket 请求头、ACK 字段错位与备用节点回落问题，连接失败时提示用户、连接成功仅写日志，不再打扰观看。
-- `update:` TV 包升级到 `1.7.3 (10703)` 预发布，沿用 1.7.1 的硬件解码默认开启策略。
-
-### 发布与工程
-
-- `optimize:` Windows / Android / TV 本地构建链统一收敛回单路径 Flutter，减少多套 SDK 混跑导致的路径污染问题。
-- `update:` 发布链路已拆成 Android / Windows / Linux 三条独立工作流，macOS 改为手动入口，并补齐 Android TV 正式 release。
-- `update:` Windows / Android / Android TV 本地 Flutter 已升级到 `3.41.9`，并保留 Linux WSL 独立 Flutter 构建路径。
-
-## 下一步计划 2026.5.18
-
-### 全平台通用
-
-- [x] `fix`：弹幕展示行数改为跟随显示区域自适应分配，动态调整弹幕上下行间距；限制间距最小值避免弹幕重叠，限制间距最大值防止留白过大、界面观感不佳及内容溢出，实现弹幕行数自适应贴合显示区域。==（或者通过用户自定义弹幕上下间距以控制显示的行数，各有优劣）==
-- [x] `optimize`：关于功能`播放器中显示SC`，默认设为关闭。
-- [ ] `optimize`：继续补完部分平台接口细节，例如分区字段、标签图标、推荐逻辑反查和直播间周边数据一致性。
-- [ ] `optimize`：继续研究虎牙贡献榜的稳定方案，如果网页端不稳定，再评估 APP 侧接口或保底方案。
-- [x] `optimize`：继续优化聊天区自动滚动、推荐直播、观看历史和贡献榜筛选等直播间交互体验。
-  - [ ] 播放页面贡献榜、关注等区域新增支持自定义排序，如主页的外观/主页设置一样。
-
-- [x] `update`：新加每月功能讨论区，提供用户投票功能来更新下一阶段方案。
-- [ ] `update`：支持 Windows 客户端多开，满足双直播间同时观看需求。`issue #13`
-- [ ] `optimize`：补强抖音主播查找与房间号定位方案，完善链接解析入口或搜索引导。`issue #11`
-
-### Android
-
-- [x] `fix`：修复直播非全屏模式下，关注页面筛选标签乱跳问题；全屏长按进入关注页时，筛选标签功能正常。
-- [x] `optimize`：继续补强安卓直播间底部按钮与虚拟导航栏重叠、后台长时间挂起后的恢复细节。
-- [x] `fix`：排查大量关注数据下刷新后“直播中”数量明显偏少、只显示少量开播项的问题。`issue #12`（5/18 修复并发计数器竞争）
-
-### Android TV
-
-- [ ] `fix`：排查恢复大量关注备份后闪退、重启后仍闪退的问题，优化超大关注列表的稳定性。`issue #12`
-- [ ] `fix`：排查 TV 端抖音弹幕偶发不显示的问题，补充弹幕连接失败提示、请求头 / cookie / 节点兼容性兜底。`issue #12`
-- [ ] `optimize`：继续排查 Android TV 设备兼容性，重点关注黑屏、有声无画和硬件解码差异问题。
-
-### MacOS 及 IOS
-
-- [ ] `fix`：修补依赖的冲突，发布release。
+- Android/iOS 真实设备验证特别关注开播提醒、自动小窗、静音、多开声音隔离，并继续收紧小窗预览恢复逻辑。
+- 继续验证 WebDAV 恢复、局域网二维码/手动输入、远程房间同步在不同网络环境下的失败提示和可用性。
+- 继续跟踪虎牙头条偶发不显示、视频卡住后刷新恢复、SC 高峰时播放器浮层稳定性。
+- 继续完善抖音搜索登录引导；TV 端保持无浏览器方案，通过手机或桌面端登录后同步 Cookie。
+- 评估 TV 端超大关注备份恢复的稳定性。
 
 ## 参考及引用
 
@@ -215,6 +197,8 @@ TV 下载建议：
 [YunzhiYike/douyin-live](https://github.com/YunzhiYike/douyin-live)
 
 [5ime/Tiktok_Signature](https://github.com/5ime/Tiktok_Signature)
+
+[EmojiAll 抖音平台表情](https://www.emojiall.com/zh-hans/platform-douyin) `感谢提供抖音平台表情参考，项目内仅作为本地静态表情资源使用`
 
 ## 声明
 
@@ -250,10 +234,13 @@ TV 下载建议：
 
 ## Star History
 
-<a href="https://www.star-history.com/#xiaoyaocz/dart_simple_live&Date">
+<a href="https://www.star-history.com/?repos=June6699%2Fdart_simple_live&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=xiaoyaocz/dart_simple_live&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=xiaoyaocz/dart_simple_live&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=xiaoyaocz/dart_simple_live&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=June6699/dart_simple_live&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=June6699/dart_simple_live&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=June6699/dart_simple_live&type=date&legend=top-left" />
  </picture>
 </a>
+
+
+

@@ -17,6 +17,9 @@ import 'package:simple_live_tv_app/modules/hot_live/hot_live_controller.dart';
 import 'package:simple_live_tv_app/modules/hot_live/hot_live_page.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_tv_app/modules/live_room/live_room_page.dart';
+import 'package:simple_live_tv_app/modules/multi_room/multi_room_controller.dart';
+import 'package:simple_live_tv_app/modules/multi_room/multi_room_models.dart';
+import 'package:simple_live_tv_app/modules/multi_room/multi_room_page.dart';
 import 'package:simple_live_tv_app/modules/search/anchor/search_anchor_controller.dart';
 import 'package:simple_live_tv_app/modules/search/anchor/search_anchor_page.dart';
 import 'package:simple_live_tv_app/modules/search/room/search_room_controller.dart';
@@ -25,6 +28,9 @@ import 'package:simple_live_tv_app/modules/settings/settings_controller.dart';
 import 'package:simple_live_tv_app/modules/settings/settings_page.dart';
 import 'package:simple_live_tv_app/modules/sync/sync_controller.dart';
 import 'package:simple_live_tv_app/modules/sync/sync_page.dart';
+import 'package:simple_live_tv_app/modules/sync/webdav/webdav_config_page.dart';
+import 'package:simple_live_tv_app/modules/sync/webdav/webdav_controller.dart';
+import 'package:simple_live_tv_app/modules/sync/webdav/webdav_page.dart';
 
 import 'route_path.dart';
 
@@ -51,6 +57,17 @@ class AppPages {
         BindingsBuilder.put(() => SyncController()),
       ],
     ),
+    GetPage(
+      name: RoutePath.kWebDAV,
+      page: () => const WebDavPage(),
+      bindings: [
+        BindingsBuilder.put(() => WebDavController()),
+      ],
+    ),
+    GetPage(
+      name: RoutePath.kWebDAVConfig,
+      page: () => const WebDavConfigPage(),
+    ),
 
     // 关注
     GetPage(
@@ -66,6 +83,17 @@ class AppPages {
         () => LiveRoomController(
           pSite: Get.arguments,
           pRoomId: Get.parameters["roomId"] ?? "",
+        ),
+      ),
+    ),
+    // 多屏同播
+    GetPage(
+      name: RoutePath.kMultiRoom,
+      page: () => const MultiRoomPage(),
+      binding: BindingsBuilder.put(
+        () => MultiRoomController(
+          (Get.arguments as List?)?.whereType<MultiRoomItem>().toList() ??
+              const <MultiRoomItem>[],
         ),
       ),
     ),

@@ -2,7 +2,7 @@ import Cocoa
 import Darwin
 import FlutterMacOS
 
-@main
+@NSApplicationMain
 class AppDelegate: FlutterAppDelegate {
   override func applicationDidFinishLaunching(_ notification: Notification) {
     if let bundleIdentifier = Bundle.main.bundleIdentifier {

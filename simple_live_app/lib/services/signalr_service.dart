@@ -28,23 +28,23 @@ class SignalRService {
       _stateStreamController.stream;
 
   final _onFavoriteStreamController =
-      StreamController<(bool, String)>.broadcast();
-  Stream<(bool, String)> get onFavoriteStream =>
+      StreamController<RoomSyncPayload>.broadcast();
+  Stream<RoomSyncPayload> get onFavoriteStream =>
       _onFavoriteStreamController.stream;
 
   final _onHistoryStreamController =
-      StreamController<(bool, String)>.broadcast();
-  Stream<(bool, String)> get onHistoryStream =>
+      StreamController<RoomSyncPayload>.broadcast();
+  Stream<RoomSyncPayload> get onHistoryStream =>
       _onHistoryStreamController.stream;
 
   final _onShieldWordStreamController =
-      StreamController<(bool, String)>.broadcast();
-  Stream<(bool, String)> get onShieldWordStream =>
+      StreamController<RoomSyncPayload>.broadcast();
+  Stream<RoomSyncPayload> get onShieldWordStream =>
       _onShieldWordStreamController.stream;
 
   final _onBiliAccountStreamController =
-      StreamController<(bool, String)>.broadcast();
-  Stream<(bool, String)> get onBiliAccountStream =>
+      StreamController<RoomSyncPayload>.broadcast();
+  Stream<RoomSyncPayload> get onBiliAccountStream =>
       _onBiliAccountStreamController.stream;
 
   final _onRoomDestroyedStreamController = StreamController<String>.broadcast();
@@ -188,6 +188,7 @@ class SignalRService {
     required String action,
     required bool overlay,
     required String content,
+    Map<String, Object?> extraPayload = const {},
   }) {
     return _sendRequest(
       type: _mapSendAction(action),
@@ -195,6 +196,7 @@ class SignalRService {
       payload: {
         "overlay": overlay,
         "content": content,
+        ...extraPayload,
       },
       successTypes: const {"ack"},
     );
@@ -328,16 +330,13 @@ class SignalRService {
 
   void _emitBoolString(
     Map<String, dynamic> message,
-    StreamController<(bool, String)> controller,
+    StreamController<RoomSyncPayload> controller,
   ) {
     final payload = message["payload"];
     if (payload is! Map) {
       return;
     }
-    controller.add((
-      payload["overlay"] == true,
-      payload["content"]?.toString() ?? "",
-    ));
+    controller.add(RoomSyncPayload.fromMap(Map<String, dynamic>.from(payload)));
   }
 
   void _handleSocketError(Object error, StackTrace stackTrace) {
@@ -473,7 +472,9 @@ class SignalRService {
   String _readErrorMessage(Map<String, dynamic> message) {
     final error = message["error"];
     if (error is Map) {
-      return error["message"]?.toString() ?? error["code"]?.toString() ?? "未知错误";
+      return error["message"]?.toString() ??
+          error["code"]?.toString() ??
+          "未知错误";
     }
     return error?.toString() ?? "未知错误";
   }
@@ -501,6 +502,50 @@ class Resp<T> {
   final String message;
   final T? data;
   Resp(this.isSuccess, this.message, this.data);
+}
+
+class RoomSyncPayload {
+  final bool overlay;
+  final String content;
+  final int chunkIndex;
+  final int chunkTotal;
+  final int itemStart;
+  final int itemEnd;
+  final int itemTotal;
+
+  const RoomSyncPayload({
+    required this.overlay,
+    required this.content,
+    this.chunkIndex = 1,
+    this.chunkTotal = 1,
+    this.itemStart = 0,
+    this.itemEnd = 0,
+    this.itemTotal = 0,
+  });
+
+  factory RoomSyncPayload.fromMap(Map<String, dynamic> payload) {
+    return RoomSyncPayload(
+      overlay: payload["overlay"] == true,
+      content: payload["content"]?.toString() ?? "",
+      chunkIndex: _readInt(payload["chunkIndex"], fallback: 1),
+      chunkTotal: _readInt(payload["chunkTotal"], fallback: 1),
+      itemStart: _readInt(payload["itemStart"], fallback: 0),
+      itemEnd: _readInt(payload["itemEnd"], fallback: 0),
+      itemTotal: _readInt(payload["itemTotal"], fallback: 0),
+    );
+  }
+
+  bool get isLastChunk => chunkIndex >= chunkTotal;
+
+  static int _readInt(dynamic value, {required int fallback}) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    return int.tryParse(value?.toString() ?? "") ?? fallback;
+  }
 }
 
 class RoomUser {

@@ -8,7 +8,9 @@ import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_tv_app/app/utils.dart';
 import 'package:simple_live_tv_app/modules/settings/settings_controller.dart';
 import 'package:simple_live_tv_app/services/bilibili_account_service.dart';
+import 'package:simple_live_tv_app/services/douyin_account_service.dart';
 import 'package:simple_live_tv_app/services/follow_user_service.dart';
+import 'package:simple_live_tv_app/services/mpv_options_service.dart';
 import 'package:simple_live_tv_app/services/signalr_service.dart';
 import 'package:simple_live_tv_app/widgets/app_scaffold.dart';
 import 'package:simple_live_tv_app/widgets/button/highlight_button.dart';
@@ -91,9 +93,9 @@ class SettingsPage extends GetView<SettingsController> {
               Obx(
                 () => HighlightButton(
                   focusNode: AppFocusNode(),
-                  iconData: Icons.account_circle_outlined,
+                  iconData: Icons.grid_view,
                   selected: controller.tabIndex.value == 3,
-                  text: "账号",
+                  text: "多屏",
                   onTap: () {
                     controller.tabController.animateTo(3);
                   },
@@ -103,11 +105,23 @@ class SettingsPage extends GetView<SettingsController> {
               Obx(
                 () => HighlightButton(
                   focusNode: AppFocusNode(),
-                  iconData: Icons.info_outline,
+                  iconData: Icons.account_circle_outlined,
                   selected: controller.tabIndex.value == 4,
-                  text: "关于",
+                  text: "账号",
                   onTap: () {
                     controller.tabController.animateTo(4);
+                  },
+                ),
+              ),
+              AppStyle.hGap32,
+              Obx(
+                () => HighlightButton(
+                  focusNode: AppFocusNode(),
+                  iconData: Icons.info_outline,
+                  selected: controller.tabIndex.value == 5,
+                  text: "关于",
+                  onTap: () {
+                    controller.tabController.animateTo(5);
                   },
                 ),
               ),
@@ -121,7 +135,8 @@ class SettingsPage extends GetView<SettingsController> {
               children: [
                 buildPlayerSettings(),
                 buildDanmakuSettings(),
-                buildFollowSettings(),
+                buildFollowSettings(context),
+                buildMultiRoomSettings(),
                 buildAccountSettings(),
                 buildAbout(),
               ],
@@ -139,6 +154,36 @@ class SettingsPage extends GetView<SettingsController> {
         Text(
           "部分电视或盒子如果出现黑屏、只有声音没有画面，优先尝试打开“兼容模式”，仍异常时再关闭“硬件解码”。",
           style: AppStyle.subTextStyleWhite,
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.danmakuEmojiFoucsNode,
+            autofocus: controller.danmakuEmojiFoucsNode.isFoucsed.value,
+            title: "显示弹幕表情",
+            items: const {
+              0: "关",
+              1: "开",
+            },
+            value:
+                AppSettingsController.instance.danmuRenderEmoji.value ? 1 : 0,
+            onChanged: (e) {
+              AppSettingsController.instance.setDanmuRenderEmoji(e == 1);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.mpvProfileFocusNode,
+            autofocus: controller.mpvProfileFocusNode.isFoucsed.value,
+            title: "mpv档位",
+            items: MpvOptionsService.profileLabels,
+            value: AppSettingsController.instance.mpvProfile.value,
+            onChanged: (e) {
+              AppSettingsController.instance.setMpvProfile(e);
+            },
+          ),
         ),
         AppStyle.vGap24,
         Obx(
@@ -178,6 +223,36 @@ class SettingsPage extends GetView<SettingsController> {
         AppStyle.vGap24,
         Obx(
           () => SettingsItemWidget(
+            foucsNode: AppFocusNode(),
+            title: "关播后自动换下一个直播间",
+            items: const {0: "关", 1: "开"},
+            value: AppSettingsController.instance.autoSwitchNextOnLiveEnd.value
+                ? 1
+                : 0,
+            onChanged: (e) {
+              AppSettingsController.instance.setAutoSwitchNextOnLiveEnd(e == 1);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: AppFocusNode(),
+            title: "播放失败后自动换下一个直播间",
+            items: const {0: "关", 1: "开"},
+            value: AppSettingsController
+                    .instance.autoSwitchNextOnPlaybackFailure.value
+                ? 1
+                : 0,
+            onChanged: (e) {
+              AppSettingsController.instance
+                  .setAutoSwitchNextOnPlaybackFailure(e == 1);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
             foucsNode: controller.scaleFoucsNode,
             autofocus: controller.scaleFoucsNode.isFoucsed.value,
             title: "画面比例",
@@ -211,14 +286,48 @@ class SettingsPage extends GetView<SettingsController> {
             },
           ),
         ),
+        AppStyle.vGap24,
       ],
     );
   }
 
-  Widget buildFollowSettings() {
+  Widget buildMultiRoomSettings() {
     return ListView(
       padding: AppStyle.edgeInsetsA48,
       children: [
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.multiRoomGapFocusNode,
+            autofocus: controller.multiRoomGapFocusNode.isFoucsed.value,
+            title: "多屏间距",
+            items: const {
+              0: "0px",
+              2: "2px",
+              4: "4px",
+              8: "8px",
+              12: "12px",
+              16: "16px",
+              24: "24px",
+            },
+            value: AppSettingsController.instance.effectiveMultiRoomGap,
+            onChanged: (e) {
+              AppSettingsController.instance.setMultiRoomGap(e);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget buildFollowSettings(BuildContext context) {
+    return ListView(
+      padding: AppStyle.edgeInsetsA48,
+      children: [
+        Text(
+          "大量关注时，自动刷新会等待上一轮完成；可在关注页使用分页刷新。",
+          style: AppStyle.subTextStyleWhite,
+        ),
+        AppStyle.vGap24,
         Obx(
           () => SettingsItemWidget(
             foucsNode: controller.autoUpdateFollowEnableFocusNode,
@@ -241,25 +350,17 @@ class SettingsPage extends GetView<SettingsController> {
         ),
         AppStyle.vGap24,
         Obx(
-          () => SettingsItemWidget(
-            foucsNode: controller.autoUpdateFollowDurationFocusNode,
+          () => HighlightListTile(
+            focusNode: controller.autoUpdateFollowDurationFocusNode,
             autofocus:
                 controller.autoUpdateFollowDurationFocusNode.isFoucsed.value,
             title: "自动更新间隔",
-            items: const {
-              5: "5分钟",
-              10: "10分钟",
-              15: "15分钟",
-              20: "20分钟",
-              25: "25分钟",
-              30: "30分钟",
-              60: "1小时",
-            },
-            value:
-                AppSettingsController.instance.autoUpdateFollowDuration.value,
-            onChanged: (e) {
-              AppSettingsController.instance.setAutoUpdateFollowDuration(e);
-              FollowUserService.instance.initTimer();
+            subtitle: _formatFollowUpdateDuration(
+              AppSettingsController.instance.autoUpdateFollowDuration.value,
+            ),
+            leading: const Icon(Icons.timer_outlined),
+            onTap: () {
+              setFollowUpdateTimer(context);
             },
           ),
         ),
@@ -270,23 +371,79 @@ class SettingsPage extends GetView<SettingsController> {
             autofocus: controller.updateFollowThreadFocusNode.isFoucsed.value,
             title: "更新线程数",
             items: const {
+              0: "自动",
               1: "1",
               2: "2",
-              3: "3",
               4: "4",
               6: "6",
               8: "8",
-              10: "10",
               12: "12",
+              16: "16",
+              24: "24",
+              32: "32",
             },
-            value: AppSettingsController.instance.updateFollowThreadCount.value,
+            value:
+                AppSettingsController.instance.effectiveUpdateFollowThreadCount,
             onChanged: (e) {
               AppSettingsController.instance.setUpdateFollowThreadCount(e);
             },
           ),
         ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.followPageSizeFocusNode,
+            autofocus: controller.followPageSizeFocusNode.isFoucsed.value,
+            title: "关注每页数量",
+            items: const {
+              50: "50",
+              100: "100",
+              150: "150",
+              200: "200",
+              300: "300",
+              400: "400",
+            },
+            value: AppSettingsController.instance.followPageSize.value,
+            onChanged: (e) {
+              AppSettingsController.instance.setFollowPageSize(e);
+              FollowUserService.instance.applyPageSizeSetting();
+            },
+          ),
+        ),
       ],
     );
+  }
+
+  String _formatFollowUpdateDuration(int minutes) {
+    return "${minutes ~/ 60}小时${minutes % 60}分钟";
+  }
+
+  void setFollowUpdateTimer(BuildContext context) async {
+    final value = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour:
+            AppSettingsController.instance.autoUpdateFollowDuration.value ~/ 60,
+        minute:
+            AppSettingsController.instance.autoUpdateFollowDuration.value % 60,
+      ),
+      initialEntryMode: TimePickerEntryMode.inputOnly,
+      builder: (_, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            alwaysUse24HourFormat: true,
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (value == null || (value.hour == 0 && value.minute == 0)) {
+      return;
+    }
+    final duration = Duration(hours: value.hour, minutes: value.minute);
+    AppSettingsController.instance
+        .setAutoUpdateFollowDuration(duration.inMinutes);
+    FollowUserService.instance.initTimer();
   }
 
   Widget buildDanmakuSettings() {
@@ -414,6 +571,205 @@ class SettingsPage extends GetView<SettingsController> {
             },
           ),
         ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.liveEventFlowFoucsNode,
+            autofocus: controller.liveEventFlowFoucsNode.isFoucsed.value,
+            title: "重点动态",
+            items: const {
+              0: "关",
+              1: "开",
+            },
+            value: AppSettingsController.instance.liveEventFlowEnable.value
+                ? 1
+                : 0,
+            onChanged: (e) {
+              AppSettingsController.instance.setLiveEventFlowEnable(e == 1);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.liveEventFlowOverlayFoucsNode,
+            autofocus: controller.liveEventFlowOverlayFoucsNode.isFoucsed.value,
+            title: "全屏显示重点动态",
+            items: const {
+              0: "关",
+              1: "开",
+            },
+            value:
+                AppSettingsController.instance.liveEventFlowOverlayEnable.value
+                    ? 1
+                    : 0,
+            onChanged: (e) {
+              AppSettingsController.instance
+                  .setLiveEventFlowOverlayEnable(e == 1);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.liveEventFlowWindowFoucsNode,
+            autofocus: controller.liveEventFlowWindowFoucsNode.isFoucsed.value,
+            title: "动态统计跨度",
+            items: const {
+              5: "5秒",
+              10: "10秒",
+              15: "15秒",
+              30: "30秒",
+              60: "60秒",
+              120: "120秒",
+            },
+            value: AppSettingsController
+                .instance.effectiveLiveEventFlowWindowSeconds,
+            onChanged: (e) {
+              AppSettingsController.instance.setLiveEventFlowWindowSeconds(e);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.liveEventFlowDisplayFoucsNode,
+            autofocus: controller.liveEventFlowDisplayFoucsNode.isFoucsed.value,
+            title: "动态展示时间",
+            items: const {
+              3: "3秒",
+              5: "5秒",
+              10: "10秒",
+              15: "15秒",
+              30: "30秒",
+              60: "60秒",
+            },
+            value: AppSettingsController
+                .instance.effectiveLiveEventFlowDisplaySeconds,
+            onChanged: (e) {
+              AppSettingsController.instance.setLiveEventFlowDisplaySeconds(e);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.liveEventFlowMinCountFoucsNode,
+            autofocus:
+                controller.liveEventFlowMinCountFoucsNode.isFoucsed.value,
+            title: "动态起显次数",
+            items: const {
+              2: "2次",
+              3: "3次",
+              5: "5次",
+              8: "8次",
+              10: "10次",
+              20: "20次",
+            },
+            value:
+                AppSettingsController.instance.effectiveLiveEventFlowMinCount,
+            onChanged: (e) {
+              AppSettingsController.instance.setLiveEventFlowMinCount(e);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.danmakuDedupeFoucsNode,
+            autofocus: controller.danmakuDedupeFoucsNode.isFoucsed.value,
+            title: "重复过滤",
+            items: const {
+              0: "关",
+              1: "开",
+            },
+            value:
+                AppSettingsController.instance.danmuDedupeEnable.value ? 1 : 0,
+            onChanged: (e) {
+              AppSettingsController.instance.setDanmuDedupeEnable(e == 1);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(
+          () => SettingsItemWidget(
+            foucsNode: controller.danmakuDedupeModeFoucsNode,
+            autofocus: controller.danmakuDedupeModeFoucsNode.isFoucsed.value,
+            title: "过滤模式",
+            items: const {
+              AppSettingsController.kDanmuDedupeModeUser: "普通",
+              AppSettingsController.kDanmuDedupeModeStrict: "刷屏严父",
+            },
+            value: AppSettingsController.instance.danmuDedupeMode.value,
+            onChanged: (e) {
+              AppSettingsController.instance.setDanmuDedupeMode(e);
+            },
+          ),
+        ),
+        AppStyle.vGap24,
+        Obx(() {
+          final strictMode =
+              AppSettingsController.instance.danmuDedupeStrictMode;
+          return SettingsItemWidget(
+            foucsNode: controller.danmakuDedupeWindowFoucsNode,
+            autofocus: controller.danmakuDedupeWindowFoucsNode.isFoucsed.value,
+            title: "过滤窗口",
+            items: strictMode
+                ? const {
+                    5: "5条",
+                    10: "10条",
+                    20: "20条",
+                    30: "30条",
+                    50: "50条",
+                    100: "100条",
+                  }
+                : const {
+                    1: "1条",
+                    5: "5条",
+                    10: "10条",
+                    20: "20条",
+                    30: "30条",
+                    50: "50条",
+                    100: "100条",
+                  },
+            value: AppSettingsController.instance.effectiveDanmuDedupeWindow,
+            onChanged: (e) {
+              AppSettingsController.instance.setDanmuDedupeWindow(e);
+              if (AppSettingsController.instance.danmuDedupeStrictMode &&
+                  AppSettingsController.instance.danmuDedupeWindow.value >
+                      AppSettingsController.kDanmuDedupeStrictWarnWindow) {
+                SmartDialog.showToast("过滤窗口超过 20 条后，弹幕可能会明显变少");
+              }
+            },
+          );
+        }),
+        Obx(() {
+          if (AppSettingsController.instance.danmuDedupeStrictMode) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppStyle.vGap24,
+              SettingsItemWidget(
+                foucsNode: controller.danmakuDedupeStepFoucsNode,
+                autofocus:
+                    controller.danmakuDedupeStepFoucsNode.isFoucsed.value,
+                title: "过滤步长",
+                items: const {
+                  1: "1",
+                  2: "2",
+                  3: "3",
+                  5: "5",
+                },
+                value: AppSettingsController.instance.danmuDedupeStep.value,
+                onChanged: (e) {
+                  AppSettingsController.instance.setDanmuDedupeStep(e);
+                },
+              ),
+            ],
+          );
+        }),
       ],
     );
   }
@@ -467,48 +823,52 @@ class SettingsPage extends GetView<SettingsController> {
           },
         ),
         AppStyle.vGap24,
-        HighlightListTile(
-          focusNode: AppFocusNode(),
-          title: "抖音账号",
-          subtitle: "无需登录",
-          leading: Image.asset(
-            "assets/images/douyin.png",
-            width: 64.w,
-            height: 64.w,
+        Obx(
+          () => HighlightListTile(
+            focusNode: AppFocusNode(),
+            title: "抖音账号",
+            subtitle: DouyinAccountService.instance.hasCookie.value
+                ? "已配置 Cookie，可用于抖音搜索和大批量刷新"
+                : "可手动粘贴，或从手机/电脑端同步抖音 Cookie",
+            leading: Image.asset(
+              "assets/images/douyin.png",
+              width: 64.w,
+              height: 64.w,
+            ),
+            onTap: controller.douyinTap,
           ),
-          onTap: () {
-            SmartDialog.showToast("无需登录抖音，您可以直接观看直播");
-          },
         )
       ],
     );
   }
 
   Widget buildAbout() {
-    return ListView(
-      padding: AppStyle.edgeInsetsA48,
-      children: [
-        HighlightListTile(
-          focusNode: controller.versionFocusNode,
-          title: "版本",
-          subtitle: "v${Utils.packageInfo.version}",
-          onTap: () => {},
-        ),
-        AppStyle.vGap24,
-        HighlightListTile(
-          focusNode: AppFocusNode(),
-          title: "同步服务",
-          subtitle: SignalRService.configuredUrl,
-          onTap: () => {},
-        ),
-        AppStyle.vGap24,
-        HighlightListTile(
-          focusNode: AppFocusNode(),
-          title: "同步代理",
-          subtitle: SignalRService.proxyDisplayName,
-          onTap: () => {},
-        ),
-      ],
+    return GetBuilder<SettingsController>(
+      builder: (controller) => ListView(
+        padding: AppStyle.edgeInsetsA48,
+        children: [
+          HighlightListTile(
+            focusNode: controller.versionFocusNode,
+            title: "版本",
+            subtitle: "v${Utils.packageInfo.version}",
+            onTap: () => {},
+          ),
+          AppStyle.vGap24,
+          HighlightListTile(
+            focusNode: AppFocusNode(),
+            title: "同步服务",
+            subtitle: SignalRService.configuredUrl,
+            onTap: controller.editSyncServerUrl,
+          ),
+          AppStyle.vGap24,
+          HighlightListTile(
+            focusNode: AppFocusNode(),
+            title: "同步代理",
+            subtitle: SignalRService.proxyDisplayName,
+            onTap: controller.editSyncProxyUrl,
+          ),
+        ],
+      ),
     );
   }
 }

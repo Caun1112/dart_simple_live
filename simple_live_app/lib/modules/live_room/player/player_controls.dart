@@ -3,10 +3,12 @@ import 'dart:io';
 
 import 'package:canvas_danmaku/canvas_danmaku.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:remixicon/remixicon.dart';
 import 'package:simple_live_app/app/app_style.dart';
+import 'package:simple_live_app/app/constant.dart';
 import 'package:simple_live_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_app/app/utils.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
@@ -58,12 +60,12 @@ Widget buildFullControls(
         const SizedBox.expand(),
         buildDanmuView(videoState, controller),
         _buildPlayerSuperChatOverlay(controller),
-        _buildLiveSubtitleOverlay(videoState.context, controller),
         _buildBufferingIndicator(videoState),
         _buildGestureLayer(
           controller,
           enableQuickAccessLongPress: true,
         ),
+        _buildLiveSubtitleOverlay(videoState.context, controller),
         _buildFullTopBar(
           controller,
           padding: padding,
@@ -135,9 +137,9 @@ Widget buildControls(
         const SizedBox.expand(),
         buildDanmuView(videoState, controller),
         _buildPlayerSuperChatOverlay(controller),
-        _buildLiveSubtitleOverlay(videoState.context, controller),
         _buildBufferingIndicator(videoState),
         _buildGestureLayer(controller),
+        _buildLiveSubtitleOverlay(videoState.context, controller),
         _buildNormalBottomBar(
           controller,
           isPortrait: isPortrait,
@@ -185,75 +187,156 @@ Widget _buildPlayerSuperChatOverlay(LiveRoomController controller) {
 }
 
 Widget _buildLiveSubtitleOverlay(
-  BuildContext context,
+  BuildContext _,
   LiveRoomController controller,
-) {
-  return Obx(() {
-    final settings = AppSettingsController.instance;
-    if (!settings.liveSubtitleEnable.value ||
-        settings.liveSubtitleModelPath.value.trim().isEmpty ||
-        LiveSubtitleService.instance.subtitleText.value.trim().isEmpty) {
+) =>
+    _LiveSubtitleOverlay(controller: controller);
+
+class _LiveSubtitleOverlay extends StatefulWidget {
+  final LiveRoomController controller;
+
+  const _LiveSubtitleOverlay({
+    required this.controller,
+  });
+
+  @override
+  State<_LiveSubtitleOverlay> createState() => _LiveSubtitleOverlayState();
+}
+
+class _LiveSubtitleOverlayState extends State<_LiveSubtitleOverlay> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!LiveSubtitleService.instance.uiEnabled) {
       return const SizedBox.shrink();
     }
+    return Obx(() {
+      final controller = widget.controller;
+      final settings = AppSettingsController.instance;
+      if (!settings.liveSubtitleEnable.value ||
+          settings.liveSubtitleModelPath.value.trim().isEmpty ||
+          LiveSubtitleService.instance.subtitleText.value.trim().isEmpty) {
+        return const SizedBox.shrink();
+      }
 
-    final padding = controller.fullScreenState.value
-        ? _fullScreenControlPadding(context)
-        : MediaQuery.of(context).padding;
-    final bottomOffset = controller.fullScreenState.value ? 96.0 : 56.0;
-    final alignment = switch (settings.liveSubtitlePosition.value) {
-      0 => Alignment.topCenter,
-      2 => Alignment.bottomCenter,
-      _ => Alignment.center,
-    };
-    final positionedPadding = EdgeInsets.only(
-      left: padding.left + 24,
-      right: padding.right + 24,
-      top: settings.liveSubtitlePosition.value == 0 ? padding.top + 64 : 0,
-      bottom: settings.liveSubtitlePosition.value == 2
-          ? padding.bottom + bottomOffset
-          : 0,
-    );
+      final mediaQuery = MediaQuery.of(context);
+      final padding = controller.fullScreenState.value
+          ? _fullScreenControlPadding(context)
+          : mediaQuery.padding;
+      final alignment = Alignment(
+        settings.liveSubtitleOffsetX.value * 2 - 1,
+        settings.liveSubtitleOffsetY.value * 2 - 1,
+      );
+      final positionedPadding = EdgeInsets.only(
+        left: padding.left + 24,
+        right: padding.right + 24,
+        top: padding.top + 24,
+        bottom: padding.bottom + 24,
+      );
+      final subtitleColor = Color(settings.liveSubtitleColor.value);
+      final locked = settings.liveSubtitlePositionLocked.value;
+      final showUnlockButton = locked && _hovering;
 
-    return Positioned.fill(
-      child: IgnorePointer(
+      return Positioned.fill(
         child: Padding(
           padding: positionedPadding,
           child: Align(
             alignment: alignment,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Colors.black.withAlpha(140),
-                  borderRadius: AppStyle.radius8,
-                ),
-                child: Padding(
-                  padding: AppStyle.edgeInsetsA8,
-                  child: Text(
-                    LiveSubtitleService.instance.subtitleText.value,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: settings.liveSubtitleFontSize.value,
-                      fontWeight: FontWeight.w600,
-                      shadows: const [
-                        Shadow(
-                          color: Colors.black,
-                          blurRadius: 4,
+            child: MouseRegion(
+              onEnter: (_) => setState(() => _hovering = true),
+              onExit: (_) => setState(() => _hovering = false),
+              child: GestureDetector(
+                behavior: HitTestBehavior.deferToChild,
+                onLongPress: locked
+                    ? () {
+                        settings.setLiveSubtitlePositionLocked(false);
+                        SmartDialog.showToast("字幕位置已解锁");
+                      }
+                    : null,
+                onPanUpdate: locked
+                    ? null
+                    : (details) {
+                        final size = mediaQuery.size;
+                        if (size.width <= 0 || size.height <= 0) {
+                          return;
+                        }
+                        settings.setLiveSubtitleOffset(
+                          x: settings.liveSubtitleOffsetX.value +
+                              details.delta.dx / size.width,
+                          y: settings.liveSubtitleOffsetY.value +
+                              details.delta.dy / size.height,
+                        );
+                      },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 720),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: settings.liveSubtitleBackgroundEnable.value
+                              ? Colors.black.withAlpha(140)
+                              : Colors.transparent,
+                          borderRadius: AppStyle.radius8,
                         ),
-                      ],
+                        child: Padding(
+                          padding: AppStyle.edgeInsetsA8,
+                          child: Text(
+                            LiveSubtitleService.instance.subtitleText.value,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: subtitleColor,
+                              fontSize: settings.liveSubtitleFontSize.value,
+                              fontWeight:
+                                  settings.liveSubtitleResolvedFontWeight,
+                              shadows: const [
+                                Shadow(
+                                  color: Colors.black,
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (showUnlockButton)
+                      Positioned(
+                        right: -12,
+                        top: -12,
+                        child: Material(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(18),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: () {
+                              settings.setLiveSubtitlePositionLocked(false);
+                              SmartDialog.showToast("字幕位置已解锁");
+                            },
+                            child: const SizedBox(
+                              width: 32,
+                              height: 32,
+                              child: Icon(
+                                Icons.lock_open_outlined,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-  });
+      );
+    });
+  }
 }
 
 Widget _buildBufferingIndicator(VideoState videoState) {
@@ -478,12 +561,24 @@ Widget _buildFullBottomBar(
                     volumeButtonKey.currentContext!,
                   );
                 },
-                icon: const Icon(
-                  Icons.volume_down,
+                icon: Icon(
+                  controller.mutedState.value
+                      ? Icons.volume_off
+                      : Icons.volume_down,
                   size: 24,
                   color: Colors.white,
                 ),
               ),
+            IconButton(
+              onPressed: controller.toggleMute,
+              icon: Icon(
+                controller.mutedState.value
+                    ? Icons.volume_off
+                    : Icons.volume_up,
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
             TextButton(
               onPressed: () => showQualitesInfo(controller),
               child: Text(
@@ -589,12 +684,24 @@ Widget _buildNormalBottomBar(
                     volumeButtonKey.currentContext!,
                   );
                 },
-                icon: const Icon(
-                  Icons.volume_down,
+                icon: Icon(
+                  controller.mutedState.value
+                      ? Icons.volume_off
+                      : Icons.volume_down,
                   size: 24,
                   color: Colors.white,
                 ),
               ),
+            IconButton(
+              onPressed: controller.toggleMute,
+              icon: Icon(
+                controller.mutedState.value
+                    ? Icons.volume_off
+                    : Icons.volume_up,
+                size: 24,
+                color: Colors.white,
+              ),
+            ),
             if (!isPortrait)
               TextButton(
                 onPressed: () => showQualitesInfo(controller),
@@ -913,6 +1020,15 @@ void showPlayerSettings(LiveRoomController controller) {
 }
 
 void showQuickAccess(LiveRoomController controller) {
+  final keys = controller.enabledQuickAccessKeys;
+  if (keys.isEmpty) {
+    SmartDialog.showToast("没有东西可展示");
+    return;
+  }
+  if (keys.length == 1) {
+    _openQuickAccessItem(controller, keys.single);
+    return;
+  }
   if (controller.useBottomSheetPlayerMenus) {
     controller.showQuickAccessSheet();
     return;
@@ -924,43 +1040,46 @@ void showQuickAccess(LiveRoomController controller) {
     useSystem: true,
     child: ListView(
       padding: AppStyle.edgeInsetsV12,
-      children: [
-        ListTile(
-          leading: const Icon(Remix.play_list_2_line),
-          title: const Text("关注列表"),
-          subtitle: const Text("快速切到已关注的直播间"),
-          onTap: () async {
-            await Utils.switchRightDialog(() {
-              showFollowUser(controller);
-            });
-          },
-        ),
-        ListTile(
-          leading: const Icon(Remix.history_line),
-          title: const Text("观看历史"),
-          subtitle: const Text("打开已经看过的直播间记录"),
-          onTap: () async {
-            await Utils.switchRightDialog(() async {
-              controller.openHistoryPage();
-            });
-          },
-        ),
-        ListTile(
-          leading: const Icon(Remix.apps_2_line),
-          title: const Text("同类推荐"),
-          subtitle: Text(controller.currentRecommendationSubtitle),
-          enabled: controller.hasCategoryRecommendation,
-          onTap: !controller.hasCategoryRecommendation
-              ? null
-              : () async {
-                  await Utils.switchRightDialog(() async {
-                    controller.openCategoryRecommendation();
-                  });
-                },
-        ),
-      ],
+      children:
+          keys.map((key) => _buildQuickAccessTile(controller, key)).toList(),
     ),
   );
+}
+
+Widget _buildQuickAccessTile(LiveRoomController controller, String key) {
+  final item = Constant.allLiveRoomQuickAccess[key]!;
+  final enabled =
+      key != "recommendation" || controller.hasCategoryRecommendation;
+  return ListTile(
+    leading: Icon(item.iconData),
+    title: Text(controller.quickAccessTitle(key)),
+    subtitle: Text(controller.quickAccessSubtitle(key)),
+    enabled: enabled,
+    onTap: !enabled
+        ? null
+        : () async {
+            await Utils.switchRightDialog(() async {
+              _openQuickAccessItem(controller, key);
+            });
+          },
+  );
+}
+
+void _openQuickAccessItem(LiveRoomController controller, String key) {
+  switch (key) {
+    case "follow":
+      showFollowUser(controller);
+      break;
+    case "history":
+      controller.openHistoryPage();
+      break;
+    case "recommendation":
+      controller.openCategoryRecommendation();
+      break;
+    case "contribution_rank":
+      controller.showContributionRankSheet();
+      break;
+  }
 }
 
 void showFollowUser(LiveRoomController controller) {
@@ -1052,7 +1171,7 @@ class _PlayerSuperChatCardState extends State<PlayerSuperChatCard> {
 }
 
 class LocalDisplaySC {
-  final LiveSuperChatMessage sc;
+  LiveSuperChatMessage sc;
   final DateTime expireAt;
   final int duration;
   LocalDisplaySC(this.sc, this.expireAt, this.duration);
@@ -1100,11 +1219,7 @@ class _PlayerSuperChatOverlayState extends State<PlayerSuperChatOverlay> {
     );
     if (currentIndex >= 0) {
       final current = _displayed[currentIndex];
-      _displayed[currentIndex] = LocalDisplaySC(
-        sc,
-        current.expireAt,
-        current.duration,
-      );
+      current.sc = sc;
       setState(() {});
       return;
     }
@@ -1160,6 +1275,9 @@ class _PlayerSuperChatOverlayState extends State<PlayerSuperChatOverlay> {
   Widget build(BuildContext context) {
     final sorted = _displayed.toList()
       ..sort((a, b) => a.sc.endTime.compareTo(b.sc.endTime));
+    if (AppSettingsController.instance.superChatSortDesc.value) {
+      sorted.replaceRange(0, sorted.length, sorted.reversed);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1172,7 +1290,11 @@ class _PlayerSuperChatOverlayState extends State<PlayerSuperChatOverlay> {
               child: PlayerSuperChatCard(
                 key: ValueKey(localSC.fingerprint),
                 message: localSC.sc,
-                onExpire: () {},
+                onExpire: () {
+                  setState(() {
+                    _removeLocalSC(localSC);
+                  });
+                },
                 duration: localSC.duration,
                 onUserTap: () => widget.controller.showUserActions(
                   localSC.sc.userName,

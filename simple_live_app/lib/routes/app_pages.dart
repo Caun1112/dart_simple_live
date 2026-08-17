@@ -1,11 +1,16 @@
 // ignore_for_file: prefer_inlined_adds
 
+import 'dart:io';
+
 import 'package:get/get.dart';
 import 'package:simple_live_app/modules/category/detail/category_detail_controller.dart';
 import 'package:simple_live_app/modules/category/detail/category_detail_page.dart';
 import 'package:simple_live_app/modules/indexed/indexed_controller.dart';
 import 'package:simple_live_app/modules/live_room/live_room_controller.dart';
 import 'package:simple_live_app/modules/live_room/live_room_page.dart';
+import 'package:simple_live_app/modules/multi_room/multi_room_controller.dart';
+import 'package:simple_live_app/modules/multi_room/multi_room_models.dart';
+import 'package:simple_live_app/modules/multi_room/multi_room_page.dart';
 import 'package:simple_live_app/modules/settings/follow_settings_page.dart';
 import 'package:simple_live_app/modules/sync/profile_backup/profile_backup_controller.dart';
 import 'package:simple_live_app/modules/sync/profile_backup/profile_backup_page.dart';
@@ -31,6 +36,8 @@ import 'package:simple_live_app/modules/mine/account/bilibili/qr_login_controlle
 import 'package:simple_live_app/modules/mine/account/bilibili/qr_login_page.dart';
 import 'package:simple_live_app/modules/mine/account/bilibili/web_login_controller.dart';
 import 'package:simple_live_app/modules/mine/account/bilibili/web_login_page.dart';
+import 'package:simple_live_app/modules/mine/account/douyin/web_login_controller.dart';
+import 'package:simple_live_app/modules/mine/account/douyin/web_login_page.dart';
 import 'package:simple_live_app/modules/settings/appstyle_setting_page.dart';
 import 'package:simple_live_app/modules/settings/auto_exit_settings_page.dart';
 import 'package:simple_live_app/modules/settings/danmu_settings_page.dart';
@@ -44,6 +51,8 @@ import 'package:simple_live_app/modules/settings/indexed_settings/indexed_settin
 import 'package:simple_live_app/modules/settings/indexed_settings/indexed_settings_page.dart';
 import 'package:simple_live_app/modules/settings/other/other_settings_controller.dart';
 import 'package:simple_live_app/modules/settings/other/other_settings_page.dart';
+import 'package:simple_live_app/modules/settings/multi_room_settings_page.dart';
+import 'package:simple_live_app/modules/settings/playback_page_settings_page.dart';
 import 'package:simple_live_app/modules/settings/play_settings_page.dart';
 
 import '../modules/indexed/indexed_page.dart';
@@ -117,10 +126,28 @@ class AppPages {
     GetPage(
       name: RoutePath.kLiveRoomDetail,
       page: () => const LiveRoomPage(),
-      binding: BindingsBuilder.put(
-        () => LiveRoomController(
-          pSite: Get.arguments,
+      transition: Platform.isIOS ? Transition.cupertino : null,
+      popGesture: Platform.isIOS,
+      binding: BindingsBuilder.put(() {
+        final args = Get.arguments;
+        final site = args is Map<String, dynamic> ? args["site"] : args;
+        final initialCollapsed = args is Map<String, dynamic> &&
+            args["initialDesktopSidePanelCollapsed"] == true;
+        return LiveRoomController(
+          pSite: site,
           pRoomId: Get.parameters["roomId"] ?? "",
+          initialDesktopSidePanelCollapsed: initialCollapsed,
+        );
+      }),
+    ),
+    // 多开同屏
+    GetPage(
+      name: RoutePath.kMultiRoom,
+      page: () => const MultiRoomPage(),
+      binding: BindingsBuilder.put(
+        () => MultiRoomController(
+          (Get.arguments as List?)?.whereType<MultiRoomItem>().toList() ??
+              const <MultiRoomItem>[],
         ),
       ),
     ),
@@ -137,6 +164,11 @@ class AppPages {
     GetPage(
       name: RoutePath.kSettingsPlay,
       page: () => const PlaySettingsPage(),
+    ),
+    //多开设置
+    GetPage(
+      name: RoutePath.kSettingsMultiRoom,
+      page: () => const MultiRoomSettingsPage(),
     ),
     //自动关闭
     GetPage(
@@ -167,6 +199,14 @@ class AppPages {
         BindingsBuilder.put(() => IndexedSettingsController()),
       ],
     ),
+    //播放页设置
+    GetPage(
+      name: RoutePath.kSettingsPlaybackPage,
+      page: () => const PlaybackPageSettingsPage(),
+      bindings: [
+        BindingsBuilder.put(() => IndexedSettingsController()),
+      ],
+    ),
     //账号设置
     GetPage(
       name: RoutePath.kSettingsAccount,
@@ -189,6 +229,14 @@ class AppPages {
       page: () => const BiliBiliQRLoginPage(),
       bindings: [
         BindingsBuilder.put(() => BiliBiliQRLoginController()),
+      ],
+    ),
+    //抖音Web登录
+    GetPage(
+      name: RoutePath.kDouyinWebLogin,
+      page: () => const DouyinWebLoginPage(),
+      bindings: [
+        BindingsBuilder.put(() => DouyinWebLoginController()),
       ],
     ),
     // 数据同步

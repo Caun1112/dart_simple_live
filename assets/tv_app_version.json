@@ -1,7 +1,7 @@
 {
-    "version": "1.7.4",
-    "version_num": 10704,
-    "version_desc": "- 远程同步改用自建 Cloudflare Worker WebSocket 服务，不再依赖作者同步域名\n- 修复局域网同步自检页错误显示为 SimpeLive android 的问题\n- 增强关注、历史、屏蔽词同步导入的容错，跳过异常数据而不是直接中断\n- 兼容主 App 新版屏蔽词导出格式\n- 同步连接异常会写入更明确的日志，方便继续定位网络或服务端问题",
-    "prerelease": true,
-    "download_url": "https://github.com/June6699/dart_simple_live/releases/tag/tv_v1.7.4"
+    "version": "1.7.6",
+    "version_num": 10706,
+    "version_desc": "- 完善抖音直播弹幕本地表情显示，内置 141 个抖音平台表情资源\n- TV 端关注列表改为分页加载，避免大量关注一次性渲染导致闪退\n- 关注刷新加入冷却和任务互斥，避免连续刷新叠加大量网络任务\n- 同步关注列表改为批量写入，并避免日志打印完整大 JSON\n- NetImage 和弹幕画布支持本地 asset 表情资源",
+    "prerelease": false,
+    "download_url": "https://github.com/June6699/dart_simple_live/releases/tag/tv_v1.7.6"
 }

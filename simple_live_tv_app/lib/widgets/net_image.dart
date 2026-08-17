@@ -24,6 +24,18 @@ class NetImage extends StatelessWidget {
     if (pic.startsWith("//")) {
       pic = 'https:$pic';
     }
+    if (pic.startsWith("asset://")) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: Image.asset(
+          pic.substring("asset://".length),
+          fit: fit,
+          height: height,
+          width: width,
+          cacheWidth: cacheWidth,
+        ),
+      );
+    }
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: ExtendedImage.network(

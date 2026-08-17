@@ -148,7 +148,7 @@ class CategoryPage extends GetView<CategoryController> {
     return HighlightWidget(
       focusNode: item.focusNode,
       onTap: () {
-        AppNavigator.toCategoryDetail(site: controller.site, category: item);
+        AppNavigator.toCategoryDetail(site: item.site, category: item);
       },
       color: Colors.white10,
       borderRadius: AppStyle.radius16,
@@ -164,7 +164,7 @@ class CategoryPage extends GetView<CategoryController> {
                   cacheWidth: 100,
                 )
               : Image.asset(
-                  "assets/images/${controller.site.id}.png",
+                  "assets/images/${item.site.id}.png",
                   width: 64.w,
                   height: 64.w,
                 ),

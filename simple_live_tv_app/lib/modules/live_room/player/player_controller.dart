@@ -10,6 +10,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:simple_live_tv_app/app/controller/app_settings_controller.dart';
 import 'package:simple_live_tv_app/app/log.dart';
+import 'package:simple_live_tv_app/services/mpv_options_service.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 mixin PlayerMixin {
@@ -29,17 +30,12 @@ mixin PlayerMixin {
   /// 视频控制器
   late final videoController = VideoController(
     player,
-    configuration: AppSettingsController.instance.playerCompatMode.value
-        ? const VideoControllerConfiguration(
-            vo: 'mediacodec_embed',
-            hwdec: 'mediacodec',
-          )
-        : VideoControllerConfiguration(
-            enableHardwareAcceleration:
-                AppSettingsController.instance.hardwareDecode.value,
-            androidAttachSurfaceAfterVideoParameters: false,
-          ),
+    configuration: MpvOptionsService.videoControllerConfiguration(),
   );
+
+  Future<void> initializePlayer() async {
+    await MpvOptionsService.applyToPlayer(player);
+  }
 }
 mixin PlayerStateMixin on PlayerMixin {
   /// 是否显示弹幕

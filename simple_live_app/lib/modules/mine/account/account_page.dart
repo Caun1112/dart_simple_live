@@ -3,7 +3,6 @@ import 'package:get/get.dart';
 import 'package:simple_live_app/app/app_style.dart';
 import 'package:simple_live_app/modules/mine/account/account_controller.dart';
 import 'package:simple_live_app/services/bilibili_account_service.dart';
-import 'package:simple_live_app/services/douyin_account_service.dart';
 
 class AccountPage extends GetView<AccountController> {
   const AccountPage({Key? key}) : super(key: key);
@@ -69,12 +68,8 @@ class AccountPage extends GetView<AccountController> {
                 height: 36,
               ),
               title: const Text("抖音直播"),
-              subtitle: Text(DouyinAccountService.instance.hasCookie.value
-                  ? "已自定义（${DouyinAccountService.instance.cookie.length} 字符）"
-                  : "使用默认 ttwid"),
-              trailing: DouyinAccountService.instance.hasCookie.value
-                  ? const Icon(Icons.delete_outline)
-                  : const Icon(Icons.chevron_right),
+              subtitle: Text(controller.getDouyinCookieSummaryText()),
+              trailing: const Icon(Icons.chevron_right),
               onTap: controller.douyinTap,
             ),
           ),

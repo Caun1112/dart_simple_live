@@ -17,10 +17,34 @@ class DanmakuContentItem {
 
   /// 是否为自己发送
   final bool selfSend;
-  DanmakuContentItem(this.text,
-      {this.color = Colors.white,
-      this.type = DanmakuItemType.scroll,
-      this.selfSend = false});
+
+  /// 文本内表情图片地址
+  final List<String>? imageUrls;
+
+  /// 按顺序排列的文本/图片片段。
+  ///
+  /// 为空时兼容旧逻辑：先绘制 [text]，再把 [imageUrls] 追加到末尾。
+  final List<DanmakuContentPart>? parts;
+
+  DanmakuContentItem(
+    this.text, {
+    this.color = Colors.white,
+    this.type = DanmakuItemType.scroll,
+    this.selfSend = false,
+    this.imageUrls,
+    this.parts,
+  });
+}
+
+class DanmakuContentPart {
+  final String? text;
+  final String? imageUrl;
+
+  const DanmakuContentPart.text(this.text) : imageUrl = null;
+  const DanmakuContentPart.image(this.imageUrl) : text = null;
+
+  bool get isText => text != null;
+  bool get isImage => imageUrl != null;
 }
 
 class SpecialDanmakuContentItem extends DanmakuContentItem {
@@ -129,8 +153,8 @@ class SpecialDanmakuContentItem extends DanmakuContentItem {
   ) {
     double toRadix(double? value, dynamic rawValue) =>
         (value! > 1 || (rawValue is String && !rawValue.contains('.')))
-            ? value /= videoSize
-            : value;
+        ? value /= videoSize
+        : value;
 
     double? convert(value) {
       if (value is num) {
@@ -152,18 +176,18 @@ class SpecialDanmakuContentItem extends DanmakuContentItem {
   }
 
   static int _parseInt(dynamic digit) => switch (digit) {
-        int() => digit,
-        double() => digit.toInt(),
-        String() => int.tryParse(digit) ?? 0,
-        _ => throw UnimplementedError()
-      };
+    int() => digit,
+    double() => digit.toInt(),
+    String() => int.tryParse(digit) ?? 0,
+    _ => throw UnimplementedError(),
+  };
 
   static double _parseDouble(dynamic digit) => switch (digit) {
-        int() => digit.toDouble(),
-        double() => digit,
-        String() => double.tryParse(digit) ?? 0,
-        _ => throw UnimplementedError()
-      };
+    int() => digit.toDouble(),
+    double() => digit,
+    String() => double.tryParse(digit) ?? 0,
+    _ => throw UnimplementedError(),
+  };
 
   static Tween<T> _makeTween<T>(T start, T end) {
     return start == end

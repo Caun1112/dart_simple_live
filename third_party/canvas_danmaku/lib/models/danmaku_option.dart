@@ -11,6 +11,9 @@ class DanmakuOption {
   /// 轨道行高倍数，用于控制上下弹幕间距。
   final double lineHeight;
 
+  /// 表情图片相对字体大小的比例。
+  final double emojiScale;
+
   /// 滚动弹幕运行时间，秒
   final int duration;
 
@@ -42,6 +45,7 @@ class DanmakuOption {
     this.fontWeight = 4,
     this.area = 1.0,
     this.lineHeight = 1.0,
+    this.emojiScale = 1.25,
     this.duration = 10,
     this.opacity = 1.0,
     this.hideBottom = false,
@@ -58,6 +62,7 @@ class DanmakuOption {
     int? fontWeight,
     double? area,
     double? lineHeight,
+    double? emojiScale,
     int? duration,
     double? opacity,
     bool? hideTop,
@@ -71,6 +76,7 @@ class DanmakuOption {
     return DanmakuOption(
       area: area ?? this.area,
       lineHeight: lineHeight ?? this.lineHeight,
+      emojiScale: emojiScale ?? this.emojiScale,
       fontSize: fontSize ?? this.fontSize,
       fontWeight: fontWeight ?? this.fontWeight,
       duration: duration ?? this.duration,
