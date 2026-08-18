@@ -3,11 +3,13 @@ simple_live_app/.vscode/settings.json
 simple_live_tv_app/.vscode/settings.json
 
 # local release artifacts
-release/
-models/
-docs/
-issue_logs/
-experience/
+# 必须带前导斜杠限定在仓库根目录，否则会匹配任意层级的同名目录
+# （曾误伤 third_party/media_kit_fix/media_kit/lib/src/models/ 导致 iOS 构建失败）
+/release/
+/models/
+/docs/
+/issue_logs/
+/experience/
 **/android/app/build/
 
 # scripts 
